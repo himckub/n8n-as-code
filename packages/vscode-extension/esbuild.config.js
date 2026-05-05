@@ -17,6 +17,75 @@ const managerCoreAgentToolingPaths = new Set([
     managerCoreAgentToolingPath,
     fs.existsSync(managerCoreAgentToolingPath) ? fs.realpathSync(managerCoreAgentToolingPath) : managerCoreAgentToolingPath,
 ]);
+const runtimeDependencyRoots = [
+    '@yagr/agent',
+    '@yagr/session-service',
+    '@yagr/stream-adapter',
+];
+
+function packageNameToParts(packageName) {
+    return packageName.startsWith('@') ? packageName.split('/') : [packageName];
+}
+
+function getPackageDir(packageName) {
+    const parts = packageNameToParts(packageName);
+    const candidates = [
+        path.join(__dirname, '..', '..', 'node_modules', ...parts),
+        path.join(__dirname, 'node_modules', ...parts),
+    ];
+    return candidates.find(candidate => fs.existsSync(path.join(candidate, 'package.json')));
+}
+
+function readPackageJson(packageDir) {
+    return JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+}
+
+function collectRuntimeDependencyClosure(packageNames) {
+    const seen = new Set();
+    const queue = [...packageNames];
+
+    while (queue.length > 0) {
+        const packageName = queue.shift();
+        if (!packageName || seen.has(packageName)) {
+            continue;
+        }
+
+        const packageDir = getPackageDir(packageName);
+        if (!packageDir) {
+            console.warn(`⚠️  runtime dependency not installed, skipping copy: ${packageName}`);
+            continue;
+        }
+
+        seen.add(packageName);
+        const packageJson = readPackageJson(packageDir);
+        const dependencyNames = [
+            ...Object.keys(packageJson.dependencies || {}),
+            ...Object.keys(packageJson.optionalDependencies || {}),
+        ];
+        for (const dependencyName of dependencyNames) {
+            if (!seen.has(dependencyName) && getPackageDir(dependencyName)) {
+                queue.push(dependencyName);
+            }
+        }
+    }
+
+    return [...seen].sort();
+}
+
+function copyRuntimeDependency(packageName, targetNodeModulesDir) {
+    const sourceDir = getPackageDir(packageName);
+    if (!sourceDir) {
+        return;
+    }
+
+    const targetDir = path.join(targetNodeModulesDir, ...packageNameToParts(packageName));
+    fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    fs.cpSync(fs.realpathSync(sourceDir), targetDir, {
+        recursive: true,
+        dereference: true,
+    });
+}
 
 const preserveManagerCoreEntrypointResolution = {
     name: 'preserve-manager-core-entrypoint-resolution',
@@ -152,6 +221,14 @@ const copySkillsAssets = {
                 fs.copyFileSync(declarationFileSrc, declarationFileDest);
                 console.log('✅ Copied n8n-workflows.d.ts to assets/');
             }
+
+            const targetNodeModulesDir = path.join(__dirname, 'out', 'node_modules');
+            fs.rmSync(targetNodeModulesDir, { recursive: true, force: true });
+            const runtimeDependencies = collectRuntimeDependencyClosure(runtimeDependencyRoots);
+            for (const packageName of runtimeDependencies) {
+                copyRuntimeDependency(packageName, targetNodeModulesDir);
+            }
+            console.log(`✅ Copied ${runtimeDependencies.length} runtime dependencies to node_modules/`);
         });
     }
 };
@@ -161,7 +238,7 @@ const extensionBuild = esbuild.build({
     entryPoints: ['./src/extension.ts'],
     bundle: true,
     outfile: 'out/extension.js',
-    external: ['vscode', 'prettier', '@yagr/agent'],
+    external: ['vscode', 'prettier', '@yagr/*'],
     format: 'cjs',
     platform: 'node',
     logOverride: {
