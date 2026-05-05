@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { normalizeToolOutputForDisplay, withNormalizedToolEndOutput } from '../utils/tool-output-display';
 
 export interface AgentPromptInput {
     prompt: string;
@@ -809,21 +810,25 @@ export class AgentRuntimeController implements vscode.Disposable {
 
             for await (const event of stream) {
                 await this.throwIfAborted(signal);
-                await streamAdapter.processLangGraphStreamEvent(event, accumulator, {
+                const normalizedToolEnd = withNormalizedToolEndOutput(event);
+                const toolEndDisplayText = normalizedToolEnd.displayText;
+                await streamAdapter.processLangGraphStreamEvent(normalizedToolEnd.event, accumulator, {
                     contextWindowTokens,
                     onTextDelta: async (delta: string) => {
                         entries = this.applyStreamEvent(entries, { type: 'text-delta', delta });
                         await postMessage({ type: 'agent.streamEvent', event: { type: 'text-delta', delta } });
                     },
                     onOperation: async (operation: any) => {
+                        const operationBody = toolEndDisplayText || (typeof operation.body === 'string' ? operation.body : normalizeToolOutputForDisplay(operation.body));
+                        const operationSummary = typeof operation.summary === 'string' ? operation.summary : normalizeToolOutputForDisplay(operation.summary);
                         const streamEvent: AgentStreamEvent = {
                             type: 'operation',
                             operationId: String(operation.operationId || randomUUID()),
                             label: String(operation.label || 'Operation'),
                             category: String(operation.category || 'tool'),
                             status: operation.status === 'error' ? 'error' : operation.status === 'done' ? 'done' : 'running',
-                            body: typeof operation.body === 'string' ? operation.body : undefined,
-                            summary: typeof operation.summary === 'string' ? operation.summary : undefined,
+                            body: operationBody,
+                            summary: operationSummary,
                             startedAt: Number(operation.startedAt || Date.now()),
                             endedAt: typeof operation.endedAt === 'number' ? operation.endedAt : undefined,
                         };
