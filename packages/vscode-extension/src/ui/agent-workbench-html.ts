@@ -388,7 +388,8 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
             grid-template-columns: repeat(3, 1fr);
             gap: 2px;
             align-items: center;
-            margin-top: 2px;
+            justify-self: start;
+            padding: 10px 14px 18px;
         }
         .run-indicator.active { display: grid; }
         .run-indicator span {
@@ -929,13 +930,13 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
                         <button id="checkpoint-open" class="ghost small icon-button" type="button" title="Checkpoints" aria-label="Checkpoints">${checkpointIcon}</button>
                         <button id="history-open" class="ghost small icon-button" type="button" title="Conversation history" aria-label="Conversation history">${historyIcon}</button>
                         <button id="new-session-header" class="ghost small icon-button" type="button" title="New conversation" aria-label="New conversation">${newConversationIcon}</button>
-                        <div id="run-indicator" class="run-indicator" aria-label="Agent running" title="Agent running">
-                            <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                        </div>
                     </div>
                 </div>
             </header>
             <div id="feed" class="feed"></div>
+            <div id="run-indicator" class="run-indicator" aria-label="Agent running" title="Agent running">
+                <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+            </div>
             <form id="composer" class="composer">
                 <div class="composer-input">
                     <div id="context-badges" class="context-badges"></div>
