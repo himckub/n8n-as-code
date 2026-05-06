@@ -18,7 +18,7 @@ const managerCoreAgentToolingPaths = new Set([
     fs.existsSync(managerCoreAgentToolingPath) ? fs.realpathSync(managerCoreAgentToolingPath) : managerCoreAgentToolingPath,
 ]);
 const runtimeDependencyRoots = [
-    '@yagr/agent',
+    '@yagr/deepagent-bootstrap',
     '@yagr/provider-runtime',
     '@yagr/session-service',
     '@yagr/stream-adapter',

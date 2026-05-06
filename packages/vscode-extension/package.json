@@ -391,7 +391,7 @@
     "@n8n-as-code/telemetry": "0.1.0",
     "@n8n-as-code/workflow-core": "0.1.0",
     "@reduxjs/toolkit": "^2.11.2",
-    "@yagr/agent": "^0.2.33",
+    "@yagr/deepagent-bootstrap": "^0.1.2",
     "@yagr/provider-runtime": "^0.1.2",
     "@yagr/session-service": "^0.1.2",
     "@yagr/stream-adapter": "^0.1.2",

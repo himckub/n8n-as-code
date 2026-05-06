@@ -989,10 +989,13 @@ export class AgentRuntimeController implements vscode.Disposable {
 
     private async getYagrAgentHandle(providerConfig: ProviderRuntimeConfig, input: AgentPromptInput): Promise<any> {
         const rootDir = input.workspaceRoot || process.cwd();
-        const agentFactory = await importRuntimeModule('@yagr/agent');
+        const [bootstrap, providerRuntime] = await Promise.all([
+            importRuntimeModule('@yagr/deepagent-bootstrap'),
+            importRuntimeModule('@yagr/provider-runtime'),
+        ]);
         const providerRegistry = LOCAL_YAGR_PROVIDER_REGISTRY;
-        const memorySources = await this.getWorkspaceMemorySources(rootDir);
-        const skillSourcePaths = await this.getWorkspaceSkillSources(rootDir);
+        const memorySources = await this.getAgentMemorySources(rootDir, providerRuntime);
+        const skillSourcePaths = await this.getAgentSkillSources(rootDir, providerRuntime);
         const key = JSON.stringify({
             rootDir,
             provider: providerConfig.provider,
@@ -1021,16 +1024,20 @@ export class AgentRuntimeController implements vscode.Disposable {
             getLocalConfig: () => localConfig,
             getApiKey: (provider: string) => credentials.get(provider),
         };
-        const handle = await agentFactory.createYagrDeepAgent(configStore as any, {
+        const model = await providerRuntime.createLangChainModel({
             provider: providerConfig.provider,
             model: providerConfig.model,
             apiKey: providerConfig.apiKey,
             baseUrl: providerConfig.baseUrl,
-        }, undefined, undefined, {
-            rootDir,
-            memorySources,
-            skillSourcePaths,
-            systemPrompt: this.buildStaticSystemPrompt(input.workspaceRoot),
+        }, configStore as any);
+        const handle = await bootstrap.createYagrDeepAgent({
+            model,
+            defaultMemorySources: memorySources,
+            defaultSkillSourcePaths: skillSourcePaths,
+            runtimeOptions: {
+                rootDir,
+                systemPrompt: this.buildStaticSystemPrompt(input.workspaceRoot),
+            },
         });
         this.cachedAgentHandle = { key, handle };
         return handle;
@@ -1095,6 +1102,14 @@ export class AgentRuntimeController implements vscode.Disposable {
         return existing.filter((candidate): candidate is string => Boolean(candidate));
     }
 
+    private async getAgentMemorySources(rootDir: string, providerRuntime: any): Promise<string[]> {
+        const globalSources = typeof providerRuntime.getActiveMemorySourcePaths === 'function'
+            ? providerRuntime.getActiveMemorySourcePaths()
+            : [];
+        const workspaceSources = await this.getWorkspaceMemorySources(rootDir);
+        return [...new Set([...globalSources, ...workspaceSources])];
+    }
+
     private async getWorkspaceSkillSources(rootDir: string): Promise<string[]> {
         const candidates = [
             path.join(rootDir, '.agents', 'skills'),
@@ -1110,6 +1125,23 @@ export class AgentRuntimeController implements vscode.Disposable {
             }
         }));
         return existing.filter((candidate): candidate is string => Boolean(candidate));
+    }
+
+    private async getAgentSkillSources(rootDir: string, providerRuntime: any): Promise<string[]> {
+        const candidatePaths = [
+            typeof providerRuntime.getYagrSkillsDir === 'function' ? providerRuntime.getYagrSkillsDir() : undefined,
+            typeof providerRuntime.getYagrWorkspaceSkillsDir === 'function' ? providerRuntime.getYagrWorkspaceSkillsDir(rootDir) : undefined,
+            ...(await this.getWorkspaceSkillSources(rootDir)),
+        ].filter((candidate): candidate is string => Boolean(candidate));
+        const existing = await Promise.all(candidatePaths.map(async (candidate) => {
+            try {
+                const stat = await fs.promises.stat(candidate);
+                return stat.isDirectory() && await this.directoryHasSkill(candidate) ? candidate : undefined;
+            } catch {
+                return undefined;
+            }
+        }));
+        return [...new Set(existing.filter((candidate): candidate is string => Boolean(candidate)))];
     }
 
     private async directoryHasSkill(directoryPath: string): Promise<boolean> {
