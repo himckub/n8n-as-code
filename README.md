@@ -63,7 +63,13 @@ Use the Claude Code plugin when you want Claude to create, update, validate, or 
 
 ### Generic Agent Skills
 
-For OpenCode, Codex, Hermes, OpenClaw, or any other AI agent, install the n8n-as-code skills package for your agent. The portable skills are packaged on npm as [`@n8n-as-code/skills`](https://www.npmjs.com/package/@n8n-as-code/skills).
+For OpenCode, Codex, Hermes, OpenClaw, or any other AI agent, install the n8n-as-code skills from the repository skills directory:
+
+```text
+https://github.com/EtienneLescot/n8n-as-code/tree/main/skills
+```
+
+If your agent asks for explicit skill paths, use `skills/n8n-manager` and `skills/n8n-architect`. The same skill content is also packaged on npm as [`@n8n-as-code/skills`](https://www.npmjs.com/package/@n8n-as-code/skills) for `n8nac` and runtime usage.
 
 Once the skills are available, ask your agent to initialize n8n-as-code in the workspace. The agent can then run the required setup itself: generate `AGENTS.md`, configure the workspace, and use the local n8n context.
 
@@ -284,7 +290,7 @@ You can keep multiple global `n8n-manager` instances and pin a workspace to a sp
 |:--------|:-------------|:--------|
 | **[VS Code Extension](packages/vscode-extension)** | Editor experience with sidebar, canvas, integrated Agent Workbench, and manager-backed runtime actions | [Marketplace](https://marketplace.visualstudio.com/items?itemName=etienne-lescot.n8n-as-code) |
 | **[n8nac](packages/cli)** | CLI for sync, validation, AI context, and runtime operations through `n8n-manager` | `npx n8nac` |
-| **[@n8n-as-code/skills](packages/skills)** | Portable AI skills and embedded n8n knowledge for agents | `npm i @n8n-as-code/skills` |
+| **[Agent Skills](skills)** | Portable AI skills and embedded n8n knowledge for agents | [repo skills directory](https://github.com/EtienneLescot/n8n-as-code/tree/main/skills) |
 | **[@n8n-as-code/n8nac](plugins/openclaw/n8n-as-code)** | OpenClaw plugin with setup, prompt context, and portable skills | `openclaw plugins install @n8n-as-code/n8nac` |
 | **[@n8n-as-code/transformer](packages/transformer)** | JSON to TypeScript workflow converter and back | `npm i @n8n-as-code/transformer` |
 | **[@n8n-as-code/workflow-core](packages/workflow-core)** | Internal workflow contracts, validation, and authoring primitives | workspace package |

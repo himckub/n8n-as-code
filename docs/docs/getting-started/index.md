@@ -164,7 +164,13 @@ See the full [Claude Plugin guide](/docs/usage/claude-plugin).
 
 ### Generic Agent Skills
 
-For OpenCode, Codex, Hermes, or any other AI agent that supports skills, install the n8n-as-code skills package for that agent. The portable skills are packaged on npm as [`@n8n-as-code/skills`](https://www.npmjs.com/package/@n8n-as-code/skills).
+For OpenCode, Codex, Hermes, or any other AI agent that supports skills, install the n8n-as-code skills from the repository skills directory:
+
+```text
+https://github.com/EtienneLescot/n8n-as-code/tree/main/skills
+```
+
+If your agent asks for explicit skill paths, use `skills/n8n-manager` and `skills/n8n-architect`.
 
 Once the skills are available, ask your agent to initialize n8n-as-code in the workspace. The agent can run the required setup itself: configure the workspace, generate `AGENTS.md`, materialize local `.agents/skills`, and resolve the local n8n context.
 

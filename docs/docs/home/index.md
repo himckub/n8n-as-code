@@ -34,7 +34,7 @@ The recommended path is the VS Code/Cursor extension. It includes the editor-spe
 | **VS Code / Cursor** | [VS Code Extension](/docs/usage/vscode-extension) - the full V2 Agent Workbench and visual workflow workspace |
 | **Terminal / CI** | [CLI](/docs/usage/cli) - explicit sync, validation, AI context generation, and automation |
 | **Claude Code / Claude Desktop** | [Claude Plugin](/docs/usage/claude-plugin) - n8n skills and MCP-backed workflow work in Claude environments |
-| **Generic coding agents** | [Skills Reference](/docs/usage/skills) - portable n8n skills packaged as `@n8n-as-code/skills` |
+| **Generic coding agents** | [Skills Reference](/docs/usage/skills) - portable n8n skills installable from the repo `skills/` directory |
 | **OpenClaw** | [OpenClaw Plugin](/docs/usage/openclaw) - portable n8n skills and setup inside OpenClaw |
 | **Runtime setup** | [n8n-manager](/docs/usage/n8n-manager) - instances, credentials, managed runtimes, deployment, execution, and inspection |
 

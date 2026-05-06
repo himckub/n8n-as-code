@@ -22,9 +22,17 @@ The Skills CLI is designed to:
 - **Support AI context generation** for better workflow suggestions
 - **Access community workflows** - Search and download from 7000+ real-world workflows
 
-## 📦 Package
+## 📦 Install Source
 
-The portable skills are packaged on npm as [`@n8n-as-code/skills`](https://www.npmjs.com/package/@n8n-as-code/skills). Install that package through your agent's skill mechanism when you use a generic coding agent such as OpenCode, Codex, Hermes, or another skill-capable agent.
+Install the portable skills from the repository skills directory when you use a generic coding agent such as OpenCode, Codex, Hermes, or another skill-capable agent:
+
+```text
+https://github.com/EtienneLescot/n8n-as-code/tree/main/skills
+```
+
+If your agent asks for explicit skill paths, use `skills/n8n-manager` and `skills/n8n-architect`.
+
+The same skill content is also packaged on npm as [`@n8n-as-code/skills`](https://www.npmjs.com/package/@n8n-as-code/skills) for `n8nac` and runtime usage.
 
 After the skills are available, the agent can initialize the workspace itself: generate `AGENTS.md`, materialize local `.agents/skills`, configure workspace context, and call `n8nac skills` commands as needed.
 
