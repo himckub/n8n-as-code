@@ -6,7 +6,7 @@ description: Use the n8n-as-code V2 extension with the integrated Agent Workbenc
 
 # VS Code / Cursor Extension Guide
 
-The n8n-as-code extension is the main V2 experience. It turns VS Code, Cursor, Windsurf, and compatible editors into an n8n workflow workspace with a sidebar, embedded canvas, explicit sync, generated AI context, and an integrated Agent Workbench.
+The n8n-as-code extension is the main V2 experience. It adds the editor-specific workflow UI: an n8n sidebar, embedded n8n canvas, explicit sync controls, and an integrated Agent Workbench.
 
 Use it when you want to ask an agent to build or fix n8n workflows while the agent can see the current workflow, selected node, active instance, project, and local workspace.
 
@@ -229,7 +229,7 @@ Agents such as Cursor, Copilot, Claude, Cline, Windsurf, and similar tools can u
 ### Agent Missing Context
 
 - Save workspace context from **n8n: Configure**.
-- Run `n8nac update-ai` if generated context files are stale.
+- Re-run **n8n: Configure** or ask the Agent to refresh the generated workspace context if files are stale.
 - Open or select the workflow/node you want the Agent to use.
 
 ## Next Steps
@@ -241,4 +241,4 @@ Agents such as Cursor, Copilot, Claude, Cline, Windsurf, and similar tools can u
 
 ---
 
-The VS Code/Cursor extension is the most direct way to give an AI agent n8n superpowers with real workflow, node, instance, and workspace context.
+The VS Code/Cursor extension is the most direct way to work with n8n from an editor: sidebar, workflow UI, and integrated agent in one place.

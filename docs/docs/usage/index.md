@@ -10,7 +10,7 @@ n8n-as-code V2 gives you multiple surfaces for the same workflow loop: grounded 
 
 ## VS Code / Cursor Extension
 
-The recommended experience. Install the extension, configure `n8n-manager`, and use the integrated Agent Workbench with live editor context.
+The recommended experience. Install the extension and use the VS Code-specific workflow UI: integrated Agent Workbench, n8n sidebar, and embedded n8n canvas.
 
 - Agent Workbench with current workflow, selected node, instance, project, and workspace context.
 - n8n sidebar with local and remote workflow status.
@@ -45,6 +45,14 @@ Use the same n8n skills in Claude Code or connect Claude Desktop through MCP. Th
 
 [**Claude Plugin Guide**](/docs/usage/claude-plugin)
 
+## Generic Agent Skills
+
+Install the portable n8n-as-code skills package for agents such as OpenCode, Codex, Hermes, or any other skill-capable coding agent. The skills are packaged on npm as [`@n8n-as-code/skills`](https://www.npmjs.com/package/@n8n-as-code/skills).
+
+Once installed, ask the agent to initialize n8n-as-code in the workspace. The agent can generate `AGENTS.md`, materialize `.agents/skills`, configure workspace context, and use `n8nac skills` behind the scenes.
+
+[**Skills Reference**](/docs/usage/skills)
+
 ## OpenClaw Plugin
 
 Install the OpenClaw plugin for portable n8n skills, workspace setup, and natural-language workflow changes inside OpenClaw.
@@ -65,5 +73,6 @@ An optional decorator-based format that makes workflow files easier to read, dif
 | Manage instances, API keys, projects, credentials, and executions | [n8n-manager](/docs/usage/n8n-manager) |
 | Script sync, validation, conversion, or CI/CD flows | [CLI Guide](/docs/usage/cli) |
 | Ask Claude to create, update, or debug workflows | [Claude Plugin](/docs/usage/claude-plugin) |
+| Use n8n skills in a generic coding agent | [Skills Reference](/docs/usage/skills) |
 | Use n8n skills inside OpenClaw | [OpenClaw Plugin](/docs/usage/openclaw) |
 | Work in a more AI-readable source format | [TypeScript Workflows](/docs/usage/typescript-workflows) |

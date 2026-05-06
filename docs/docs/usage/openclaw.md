@@ -49,12 +49,12 @@ openclaw gateway restart
 
 ## Setup Flow
 
-The setup wizard walks through the same core steps as the CLI:
+The setup wizard walks through the same core setup as the other facades:
 
 1. Save the n8n host and API key through `n8n-manager auth set`.
 2. Select the active n8n project through `n8n-manager projects select`.
 3. Configure workspace-local sync through `n8nac workspace set-sync-folder`.
-4. Generate `AGENTS.md` with `n8nac update-ai`.
+4. Materialize the generated agent context and local skills.
 5. Point OpenClaw at the initialized workspace in `~/.openclaw/n8nac/`.
 
 Once the workspace exists, agents can inspect and switch global n8n-manager instances through the shared backend facade instead of rewriting `n8nac-config.json` by hand.
@@ -94,7 +94,7 @@ The plugin keeps its working files under:
 
 ### Agent CLI Flow
 
-Agents use the same shell commands as other facades:
+Agents use the same shell commands as other facades behind the scenes:
 
 ```bash
 n8n-manager instances list
@@ -105,7 +105,6 @@ npx --yes n8nac workspace set-sync-folder workflows
 npx --yes n8nac list
 npx --yes n8nac pull <workflow-id>
 npx --yes n8nac push <file>
-npx --yes n8nac update-ai
 ```
 
 That keeps OpenClaw aligned with the CLI, VS Code extension, and Claude plugin instead of inventing a separate sync path.

@@ -44,34 +44,23 @@ For prerelease testing from the `next` branch, add the marketplace with a branch
 /plugin install n8n-as-code@n8nac-marketplace
 ```
 
-When you run setup commands manually with the prerelease plugin, use matching npm dist-tags:
+When you debug prerelease commands manually, use matching npm dist-tags:
 
 ```bash
 npx --yes @n8n-as-code/n8n-manager@next instances list
 npx --yes n8nac@next workspace status --json
-npx --yes n8nac@next update-ai
 ```
 
 The prerelease plugin skills are stamped to use those `@next` commands automatically.
 
-Then initialize your workspace once:
-
-```bash
-cd /path/to/your/n8n-project
-n8n-manager auth set --url <url> --api-key-stdin
-n8n-manager projects select <project-id-or-name>
-npx --yes n8nac workspace set-sync-folder workflows
-npx --yes n8nac update-ai
-```
-
-Restart Claude Code if needed, then start asking for workflow changes.
-
-`update-ai` creates a lightweight `AGENTS.md` bootstrap plus local copies of the portable skills:
+Then open your project in Claude Code and ask Claude to initialize n8n-as-code in the workspace. The installed skills guide Claude through the setup: selecting or creating the runtime context, choosing the sync folder, generating `AGENTS.md`, and materializing local copies of the portable skills:
 
 ```text
 .agents/skills/n8n-manager/SKILL.md
 .agents/skills/n8n-architect/SKILL.md
 ```
+
+Restart Claude Code if needed, then start asking for workflow changes.
 
 :::note
 The official Claude Code marketplace listing is pending review. The install path above uses an alternative marketplace hosted in the GitHub repository — it works the same way.
@@ -101,15 +90,7 @@ Use the local MCP server to give Claude Desktop access to the n8n knowledge base
 
    `N8N_AS_CODE_PROJECT_DIR` is optional but recommended — it tells the server where to find your `n8nac-config.json`.
 
-2. **Initialize your workspace**:
-
-   ```bash
-   cd /path/to/your/n8n-project
-   n8n-manager auth set --url <url> --api-key-stdin
-   n8n-manager projects select <project-id-or-name>
-   npx --yes n8nac workspace set-sync-folder workflows
-   npx --yes n8nac update-ai
-   ```
+2. **Use an initialized project**. Initialize it through Claude Code, the VS Code extension, or another agent with the n8n-as-code skills installed. The generated workspace context should include `AGENTS.md`, `.agents/skills`, and `n8nac-config.json` when you need live n8n context.
 
 3. **Restart Claude Desktop** to reload the MCP server.
 
@@ -158,9 +139,8 @@ Upload the skill manually:
 If you use Claude Code with planning and coding agent handoffs:
 
 1. Install the plugin
-2. Configure the workspace with `n8n-manager auth set`, `n8n-manager projects select`, and `n8nac workspace set-sync-folder`
-3. Run `n8nac update-ai` — this generates `AGENTS.md` plus `.agents/skills` at the project root
-4. Point any handoff file (e.g. `CLAUDE.md`) at `AGENTS.md` and the local skills:
+2. Ask Claude to initialize n8n-as-code in the workspace if it has not been initialized yet
+3. Point any handoff file (e.g. `CLAUDE.md`) at `AGENTS.md` and the local skills:
 
    ```md
    # Claude Code Project Instructions

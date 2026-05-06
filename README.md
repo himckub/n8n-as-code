@@ -40,48 +40,19 @@ V2 ships an integrated VS Code/Cursor Agent, real instance management through `n
 
 ## Quick Start
 
-Start with the VS Code/Cursor extension if you want the full V2 experience: an n8n sidebar, live workflow context, a built-in agent, and runtime operations powered by `n8n-manager`.
+Choose the entry point that matches where you want to work with n8n.
 
-<table>
-<tr>
-<td width="50%" valign="top">
+### VS Code / Cursor
 
-### VS Code / Cursor Agent
+This is the recommended path for day-to-day workflow work. The extension adds the VS Code-specific experience: an n8n sidebar, an integrated workflow UI, and an integrated agent.
 
-**Best for:** agent-led workflow creation, editing, testing, and review inside the editor.
+Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=etienne-lescot.n8n-as-code) or [Open VSX](https://open-vsx.org/extension/etienne-lescot/n8n-as-code), open the `n8n` view, then click on `Configure`. The setup is graphical: choose a managed local n8n instance, connect an existing instance, or stay in generation-only mode.
 
-1. Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=etienne-lescot.n8n-as-code) or [Open VSX](https://open-vsx.org/extension/etienne-lescot/n8n-as-code).
-2. Open a folder or `.code-workspace`.
-3. Open the `n8n` view and run `n8n: Configure`.
-4. Create a managed local n8n instance or connect an existing n8n instance through `n8n-manager`.
-5. Select a project, save the workspace context, then ask the Agent to build, update, test, or debug a workflow.
-
-[VS Code guide](https://n8nascode.dev/docs/usage/vscode-extension/)
-
-</td>
-<td width="50%" valign="top">
-
-### CLI / Automation
-
-**Best for:** terminal-first sync, scripts, CI, and direct workflow operations.
-
-```bash
-n8n-manager auth set --url <url> --api-key-stdin
-n8n-manager projects select <project-id-or-name>
-npx --yes n8nac workspace set-sync-folder workflows
-npx --yes n8nac update-ai
-```
-
-[CLI guide](https://n8nascode.dev/docs/usage/cli/) · [n8n-manager guide](https://n8nascode.dev/docs/usage/n8n-manager/)
-
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
+[VS Code / Cursor guide](https://n8nascode.dev/docs/usage/vscode-extension/)
 
 ### Claude Code
 
-**Best for:** natural-language workflow work in Claude Code using the same n8n skills and manager-backed runtime.
+Use the Claude Code plugin when you want Claude to create, update, validate, or debug n8n workflows with the bundled n8n skills.
 
 ```text
 /plugin marketplace add https://github.com/EtienneLescot/n8n-as-code
@@ -90,24 +61,33 @@ npx --yes n8nac update-ai
 
 [Claude setup docs](https://n8nascode.dev/docs/usage/claude-plugin/)
 
-</td>
-<td width="50%" valign="top">
+### Generic Agent Skills
 
-### OpenClaw
+For OpenCode, Codex, Hermes, OpenClaw, or any other AI agent, install the n8n-as-code skills package for your agent. The portable skills are packaged on npm as [`@n8n-as-code/skills`](https://www.npmjs.com/package/@n8n-as-code/skills).
 
-**Best for:** OpenClaw users who want portable n8n skills, setup, and runtime actions.
+Once the skills are available, ask your agent to initialize n8n-as-code in the workspace. The agent can then run the required setup itself: generate `AGENTS.md`, configure the workspace, and use the local n8n context.
+
+Agents can then use commands such as:
 
 ```bash
-openclaw plugins install @n8n-as-code/n8nac
-openclaw n8nac:setup
-openclaw gateway restart
+npx --yes n8nac skills search "send slack message when google sheet is updated"
+npx --yes n8nac skills node-info slack
+npx --yes n8nac skills validate workflows/my-workflow.workflow.ts
 ```
 
-[OpenClaw setup docs](https://n8nascode.dev/docs/usage/openclaw/)
+[Skills reference](https://n8nascode.dev/docs/usage/skills/)
 
-</td>
-</tr>
-</table>
+### CLI / CI
+
+Use the CLI in scripts and CI when you need repeatable validation, sync, or deployment checks without opening an editor.
+
+```bash
+npx --yes n8nac skills validate workflows/my-workflow.workflow.ts
+npx --yes n8nac push workflows/instance/project/my-workflow.workflow.ts --verify
+npx --yes n8nac verify <workflow-id>
+```
+
+[CLI guide](https://n8nascode.dev/docs/usage/cli/) · [n8n-manager guide](https://n8nascode.dev/docs/usage/n8n-manager/)
 
 > Then tell your agent what you want to do with n8n.
 > It can use the current workflow, selected node, n8n instance, and workspace context to create flows, edit nodes, search docs and templates, push changes, provision missing credentials, run supported workflows, and inspect executions.
