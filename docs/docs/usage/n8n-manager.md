@@ -34,6 +34,49 @@ n8n-as-code (facades: CLI, VS Code, MCP, Claude, OpenClaw)
 - Facades use `n8n-manager` through the `@n8n-as-code/manager-adapter` package
 - The CLI (`n8nac`) wraps both engines: workflow commands through its own engine, runtime/instance commands through `n8n-manager`
 
+## Global Store And Workspace Overrides
+
+Version 2 separates runtime identity from repository-local workflow context.
+
+`n8n-manager` owns the global runtime store: n8n instances, API keys, managed local runtime state, tunnels, and instance-level project defaults. This store is shared by the CLI, VS Code extension, Claude/OpenClaw skills, MCP-adjacent workflows, and any other facade on the same machine.
+
+Your workflow repository keeps only workspace overrides in `n8nac-config.json`. These overrides are safe to commit because they do not contain API keys. They answer questions such as:
+
+- Which global instance should this repository use?
+- Which n8n project should this repository target?
+- Which local sync folder should workflow files use?
+- Should folder sync or custom node paths be enabled for this workspace?
+
+The effective context is resolved in this order:
+
+1. Explicit command input, such as `--instance` or a command-specific option
+2. Workspace overrides from `n8nac-config.json`
+3. Global defaults from `n8n-manager`
+
+To pin a repository to one registered global instance, list instances with `n8n-manager`, then write the workspace override with `n8nac`:
+
+```bash
+n8n-manager instances list
+n8nac workspace pin-instance --instance-id <instance-id>
+n8nac workspace set-sync-folder workflows
+n8nac workspace status --json
+```
+
+`pin-instance` is intentionally an `n8nac workspace` command, not an `n8n-manager` command: it does not create or modify the global instance. It only records that the current workspace should prefer that instance over the global active instance.
+
+### Repo-local manager store (advanced)
+
+The recommended v2 model is a shared global `n8n-manager` store plus repository-local `n8nac-config.json` overrides. If you need a fully repo-local manager store for a sandbox, set `N8N_MANAGER_HOME` before running both `n8n-manager` and `n8nac`:
+
+```bash
+export N8N_MANAGER_HOME="$PWD/.n8n-manager"
+
+n8n-manager instances list
+n8nac workspace status --json
+```
+
+Do not commit `.n8n-manager/`: it can contain API keys, local runtime state, logs, and tunnel metadata.
+
 ## n8n-manager Commands
 
 These are the commands you interact with when managing the runtime side of n8n-as-code:
@@ -102,7 +145,8 @@ The `n8nac` CLI is a facade that orchestrates both engines:
 n8n-manager auth set --url <url> --api-key-stdin
 n8n-manager projects select <project-id-or-name>
 
-# n8nac handles workspace and workflow commands
+# n8nac handles workspace overrides and workflow commands
+n8nac workspace pin-instance --instance-id <instance-id>
 n8nac workspace set-sync-folder workflows
 n8nac list
 n8nac pull <workflowId>
@@ -183,11 +227,12 @@ n8nac setup --mode generation-only
 | Data | Location |
 |:-----|:---------|
 | Instance configs | `~/.n8n-manager/instances.json` |
-| API keys | `~/.n8n-manager/credentials/` (encrypted) |
-| Tunnel state | `~/.n8n-manager/tunnels/` |
+| API keys | `~/.n8n-manager/secrets.json` |
+| Managed runtime state | `~/.n8n-manager/runtime/` and `~/.n8n-manager/instance.json` |
+| Tunnel/log state | `~/.n8n-manager/logs/` and related manager files |
 | Workspace overrides | `n8nac-config.json` (in workspace, safe to commit) |
 
-**Never edit these files by hand.** Always use the documented `n8n-manager` and `n8nac workspace` commands.
+`secrets.json` is written with restrictive file permissions where the platform supports them. Never edit these files by hand. Always use the documented `n8n-manager` and `n8nac workspace` commands.
 
 ## Related Documentation
 

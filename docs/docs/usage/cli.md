@@ -125,8 +125,10 @@ n8n-manager projects list
 n8n-manager projects select <project-id-or-name>
 ```
 
+See the [n8n-manager guide](/docs/usage/n8n-manager) for the full runtime model, storage locations, and managed local runtime commands.
+
 ### `workspace`
-Manage explicit workspace overrides over the global n8n-manager defaults.
+Manage explicit workspace overrides over the global n8n-manager defaults. These commands write `n8nac-config.json` in the current workspace; they do not create n8n instances or store API keys.
 
 ```bash
 n8nac workspace status --json
@@ -139,6 +141,27 @@ n8nac workspace clear-project
 ```
 
 The workspace config stores project selection, optional pinned instance, optional sync folder override, and workflow-related settings. It does not store the global instance library or API keys.
+
+| Command | What it changes |
+|---|---|
+| `n8nac workspace status --json` | Prints the effective instance, project, sync folder, and where each value came from |
+| `n8nac workspace pin-instance --instance-id <instanceId>` | Pins this repository to an existing global `n8n-manager` instance |
+| `n8nac workspace clear-instance` | Removes the local instance pin so the workspace falls back to the global active instance |
+| `n8nac workspace set-sync-folder workflows` | Stores the repository-local sync folder override |
+| `n8nac workspace clear-sync-folder` | Falls back to the global/default sync folder behavior |
+| `n8nac workspace set-project --project-id <id> --project-name <name>` | Stores a workspace-specific n8n project override |
+| `n8nac workspace clear-project` | Falls back to the selected instance's default project |
+
+Use this when each repository should keep its own runtime target while sharing the same machine-level `n8n-manager` instance registry:
+
+```bash
+n8n-manager instances list
+n8nac workspace pin-instance --instance-id <instanceId>
+n8nac workspace set-sync-folder workflows
+n8nac workspace status --json
+```
+
+Effective context is resolved in this order: explicit command options, workspace overrides, then global `n8n-manager` defaults.
 
 ### `setup`
 Choose how the `n8nac` facade should use n8n runtime capabilities.

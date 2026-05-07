@@ -39,6 +39,8 @@ Or install globally if you prefer:
 npm install -g n8nac
 ```
 
+Full documentation: [CLI guide](https://n8nascode.dev/docs/usage/cli/) · [n8n-manager guide](https://n8nascode.dev/docs/usage/n8n-manager/)
+
 ## Commands
 
 ### v2 migration note
@@ -54,6 +56,14 @@ n8n-manager projects list
 n8n-manager projects select <project-id-or-name>
 n8nac workspace set-sync-folder workflows
 n8nac update-ai
+```
+
+If a repository should always use a specific registered instance, pin it locally after listing the global instances:
+
+```bash
+n8n-manager instances list
+n8nac workspace pin-instance --instance-id <instanceId>
+n8nac workspace status --json
 ```
 
 ---
@@ -74,6 +84,8 @@ n8nac workspace clear-project
 The workspace config stays minimal: project selection, optional pinned instance, optional sync folder override, and related workflow settings. It does not store an instance library or API keys.
 
 Project defaults are selected with `n8n-manager projects select`. Workspace-specific project overrides use `n8nac workspace set-project`.
+
+Effective context is resolved in this order: explicit command options, workspace overrides from `n8nac-config.json`, then global `n8n-manager` defaults.
 
 ---
 

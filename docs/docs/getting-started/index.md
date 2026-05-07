@@ -119,6 +119,14 @@ n8nac workspace set-sync-folder workflows
 n8nac update-ai
 ```
 
+If this repository should always use a specific registered instance instead of the current global active instance, pin it in the workspace:
+
+```bash
+n8n-manager instances list
+n8nac workspace pin-instance --instance-id <instance-id>
+n8nac workspace status --json
+```
+
 You can also use facade setup modes:
 
 ```bash

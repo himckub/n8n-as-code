@@ -8,6 +8,8 @@ This package powers the shared n8n ontology behind `n8n-as-code`: searchable nod
 
 > **BREAKING CHANGE (v2.0.0)**: Generated agent context now assumes the split runtime model: use `n8n-manager` for global instance/auth/runtime/project state and `n8nac workspace` for workspace overrides. Legacy workspace-local instance libraries are no longer treated as the runtime source of truth.
 
+Runtime documentation: [n8n-manager guide](https://n8nascode.dev/docs/usage/n8n-manager/) · [CLI workspace commands](https://n8nascode.dev/docs/usage/cli/#workspace) · [Skills guide](https://n8nascode.dev/docs/usage/skills/)
+
 > **📌 Internal Library** — This package is not meant to be used directly. Public access is via [`n8nac`](https://www.npmjs.com/package/n8nac): `npx n8nac skills <command>`.
 
 Specialized tooling for AI agents across Copilot, Cursor, Windsurf, Claude Code, and related editor or CLI workflows.

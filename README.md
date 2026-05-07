@@ -26,7 +26,7 @@ V2 ships an integrated VS Code/Cursor Agent, real instance management through `n
 
 <br>
 
-[**Documentation**](https://n8nascode.dev/) · [**Getting Started**](https://n8nascode.dev/docs/getting-started/) · [**VS Code Guide**](https://n8nascode.dev/docs/usage/vscode-extension/)
+[**Documentation**](https://n8nascode.dev/) · [**Getting Started**](https://n8nascode.dev/docs/getting-started/) · [**VS Code Guide**](https://n8nascode.dev/docs/usage/vscode-extension/) · [**n8n-manager Guide**](https://n8nascode.dev/docs/usage/n8n-manager/)
 
 </div>
 
@@ -102,6 +102,7 @@ npx --yes n8nac verify <workflow-id>
 
 - **Integrated VS Code Agent** — the extension now includes an Agent Workbench that understands the selected workflow, selected node, active instance, project, and local workspace.
 - **`n8n-manager` runtime foundation** — instance registration, API keys, managed local runtimes, project selection, credential readiness, deployment, execution, and inspection use the same runtime layer across surfaces.
+- **Split runtime/workspace config** — `n8n-manager` stores global instances and API keys, while `n8nac-config.json` stores repository-local overrides such as pinned instance, project, and sync folder.
 - **One grounded workflow loop** — local files, n8n schema knowledge, docs, templates, validation, push/pull, credential setup, activation, test execution, and execution inspection are available from the same product flow.
 
 ### Prereleases

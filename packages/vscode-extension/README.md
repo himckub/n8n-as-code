@@ -24,6 +24,12 @@ Marketplace links:
 - Microsoft Marketplace: https://marketplace.visualstudio.com/items?itemName=etienne-lescot.n8n-as-code
 - Open VSX: https://open-vsx.org/extension/etienne-lescot/n8n-as-code
 
+Documentation links:
+
+- VS Code guide: https://n8nascode.dev/docs/usage/vscode-extension/
+- n8n-manager guide: https://n8nascode.dev/docs/usage/n8n-manager/
+- Getting started: https://n8nascode.dev/docs/getting-started/
+
 Prerelease builds are published on the VS Code Marketplace prerelease channel when available. If you use a prerelease extension with manual CLI commands or generated agent context, keep the CLI on the same prerelease line:
 
 ```bash
@@ -86,6 +92,8 @@ The editor integration uses the shared `n8nac` CLI and `@n8n-as-code/skills` pac
 Version 2 makes `n8n-manager` the source of truth for instance registration, API keys, managed Docker runtimes, tunnels, and project defaults. Existing workspace-local instance libraries are no longer migrated automatically; reconfigure the extension through `n8n: Configure`, then save explicit workspace overrides when the workspace should differ from the global default.
 
 The extension reads global instances and API keys from n8n-manager. `n8nac-config.json` at the workspace root stores only workspace overrides such as pinned instance, selected project, and sync folder.
+
+The equivalent CLI flow is `n8n-manager instances list`, then `n8nac workspace pin-instance --instance-id <instanceId>` and `n8nac workspace status --json`. See the [n8n-manager guide](https://n8nascode.dev/docs/usage/n8n-manager/) for storage locations and effective context precedence.
 
 ### Setup Modes
 

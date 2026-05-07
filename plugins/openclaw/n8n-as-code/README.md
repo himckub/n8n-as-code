@@ -8,6 +8,8 @@ Use OpenClaw to build, update, validate, and manage n8n workflows with the same 
 
 Version 2 removes the facade-specific OpenClaw runtime tool path. The plugin now delegates instance, auth, project, tunnel, credential, and presentation operations to `n8n-manager`, while workspace sync context is stored through `n8nac workspace` in `~/.openclaw/n8nac/`.
 
+Documentation: [OpenClaw guide](https://n8nascode.dev/docs/usage/openclaw/) · [n8n-manager guide](https://n8nascode.dev/docs/usage/n8n-manager/) · [CLI workspace commands](https://n8nascode.dev/docs/usage/cli/#workspace)
+
 ## Install
 
 ```bash
@@ -70,6 +72,8 @@ All files live in `~/.openclaw/n8nac/`:
 
 Instances and API keys are not stored in this workspace. They live in the global
 `n8n-manager` configuration under `~/.n8n-manager`.
+
+To pin this workspace to one global instance, run `n8n-manager instances list`, then `n8nac workspace pin-instance --instance-id <instanceId>` from `~/.openclaw/n8nac/` or through the agent skill shell.
 
 ## Agent skills
 

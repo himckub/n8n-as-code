@@ -183,10 +183,16 @@ export PATH="$PATH:$(npm config get prefix)/bin"
 
 ### "Configuration not found"
 
-Run `n8nac workspace set-sync-folder workflows` to create `n8nac-config.json`. Verify it exists:
+Run `n8nac workspace set-sync-folder workflows` to create `n8nac-config.json`. If this repository should use a specific registered n8n instance, pin it as well:
+
 ```bash
-cat n8nac-config.json
+n8n-manager instances list
+n8nac workspace pin-instance --instance-id <instanceId>
+n8nac workspace set-sync-folder workflows
+n8nac workspace status --json
 ```
+
+`n8nac-config.json` stores workspace overrides only. API keys stay in the `n8n-manager` store, not in the repository config.
 
 ### Workflow validation error
 
@@ -279,7 +285,8 @@ When asking for help, include:
 ```bash
 n8nac --version
 node --version
-cat n8nac-config.json   # redact the API key
+n8nac workspace status --json
+n8n-manager instances list
 ```
 
 - [**GitHub Discussions**](https://github.com/EtienneLescot/n8n-as-code/discussions) — questions and ideas

@@ -37,6 +37,8 @@ npx --yes n8nac update-ai
 
 `AGENTS.md` is a lightweight context-root bootstrap. It points agents to the local `.agents/skills` copies and to `n8nac workspace status --json`, which resolves effective state through the backend.
 
+Runtime state is split in v2: `n8n-manager` stores global instances and API keys, while `n8nac-config.json` stores workspace overrides. To pin the workspace to a specific global instance, run `n8n-manager instances list` and `npx --yes n8nac workspace pin-instance --instance-id <instanceId>`.
+
 ## Prerelease Marketplace
 
 To test the prerelease plugin from the `next` branch, add the marketplace with the branch suffix and use matching npm prerelease tags for any manual commands:
@@ -68,6 +70,8 @@ For Claude Desktop or other MCP clients, use:
 ```
 
 Full documentation: https://n8nascode.dev/docs/usage/claude-plugin/
+
+Runtime documentation: https://n8nascode.dev/docs/usage/n8n-manager/
 
 ## Source Repository
 
