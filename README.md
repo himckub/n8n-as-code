@@ -36,6 +36,8 @@ V2 ships an integrated VS Code/Cursor Agent, real instance management through `n
 
 > **Independent project** — n8n-as-code is an independent community project and is not affiliated with, endorsed by, or sponsored by n8n.
 
+> **Using V1?** V2 is now the default release line. V1 users can keep using the legacy branch and packages: [V1 branch](https://github.com/EtienneLescot/n8n-as-code/tree/v1) · CLI: `npx --yes n8nac@v1 <command>` · Claude Code: `/plugin marketplace add https://github.com/EtienneLescot/n8n-as-code#v1`.
+
 ---
 
 ## Quick Start
