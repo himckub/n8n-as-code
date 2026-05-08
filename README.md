@@ -36,7 +36,7 @@ V2 ships an integrated VS Code/Cursor Agent, real instance management through `n
 
 > **Independent project** — n8n-as-code is an independent community project and is not affiliated with, endorsed by, or sponsored by n8n.
 
-> **Using V1?** V2 is now the default release line. V1 users can keep using the legacy branch and packages: [V1 branch](https://github.com/EtienneLescot/n8n-as-code/tree/v1) · CLI: `npx --yes n8nac@v1 <command>` · Claude Code: `/plugin marketplace add https://github.com/EtienneLescot/n8n-as-code#v1`.
+> **Using V1?** V2 is now the default release line. V1 users can keep using the legacy branch and packages: [V1 branch](https://github.com/EtienneLescot/n8n-as-code/tree/v1) · CLI: `npx --yes n8nac@v1 <command>` · Claude Code: `/plugin marketplace add https://github.com/EtienneLescot/n8n-as-code#v1`. The VS Code/OpenVSX listing now follows V2; V1 editor users must install the legacy VSIX manually from [v1.46.1-legacy](https://github.com/EtienneLescot/n8n-as-code/releases/tag/v1.46.1-legacy) and disable extension auto-updates to avoid being upgraded back to V2.
 
 ---
 
@@ -51,6 +51,14 @@ This is the recommended path for day-to-day workflow work. The extension adds th
 Install the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=etienne-lescot.n8n-as-code) or [Open VSX](https://open-vsx.org/extension/etienne-lescot/n8n-as-code), open the `n8n` view, then click on `Configure`. The setup is graphical: choose a managed local n8n instance, connect an existing instance, or stay in generation-only mode.
 
 [VS Code / Cursor guide](https://n8nascode.dev/docs/usage/vscode-extension/)
+
+V1 editor users should not install from the Marketplace/OpenVSX listing, because it now follows the V2 release line. Install the legacy VSIX from GitHub instead:
+
+```bash
+code --install-extension n8n-as-code-v1.46.1-legacy.vsix
+```
+
+Download it from the [v1.46.1-legacy GitHub release](https://github.com/EtienneLescot/n8n-as-code/releases/tag/v1.46.1-legacy), then disable auto-updates for the `n8n-as-code` extension so VS Code does not upgrade it back to V2.
 
 ### Claude Code
 
