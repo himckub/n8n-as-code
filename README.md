@@ -36,7 +36,7 @@ V2 ships an integrated VS Code/Cursor Agent, real instance management through `n
 
 > **Independent project** — n8n-as-code is an independent community project and is not affiliated with, endorsed by, or sponsored by n8n.
 
-> **Using V1?** V2 is now the default release line. V1 users can keep using the legacy branch and packages: [V1 branch](https://github.com/EtienneLescot/n8n-as-code/tree/v1) · CLI: `npx --yes n8nac@v1 <command>` · Claude Code: `/plugin marketplace add https://github.com/EtienneLescot/n8n-as-code#v1`. The VS Code/OpenVSX listing now follows V2; V1 editor users must install the legacy VSIX manually from [v1.46.1-legacy](https://github.com/EtienneLescot/n8n-as-code/releases/tag/v1.46.1-legacy) and disable extension auto-updates to avoid being upgraded back to V2.
+> **Using V1?** V2 is now the default release line. V1 users can keep using the legacy branch and packages: [V1 branch](https://github.com/EtienneLescot/n8n-as-code/tree/v1) · CLI: `npx --yes n8nac@v1 <command>` · Claude Code: `/plugin marketplace add https://github.com/EtienneLescot/n8n-as-code#v1`. The VS Code/OpenVSX listing now follows V2; see [VS Code / Cursor V1 legacy](#vs-code--cursor-v1-legacy) before installing the editor extension.
 
 ---
 
@@ -52,13 +52,25 @@ Install the extension from the [VS Code Marketplace](https://marketplace.visuals
 
 [VS Code / Cursor guide](https://n8nascode.dev/docs/usage/vscode-extension/)
 
-V1 editor users should not install from the Marketplace/OpenVSX listing, because it now follows the V2 release line. Install the legacy VSIX from GitHub instead:
+#### VS Code / Cursor V1 Legacy
+
+The VS Code Marketplace and Open VSX listings now follow the V2 release line. If you still need the V1 editor extension, do not install from Marketplace/OpenVSX. Install the legacy VSIX from GitHub Releases instead.
+
+1. Download `n8n-as-code-v1.46.1-legacy.vsix` from the [v1.46.1-legacy GitHub release](https://github.com/EtienneLescot/n8n-as-code/releases/tag/v1.46.1-legacy).
+2. Install the downloaded VSIX manually:
 
 ```bash
 code --install-extension n8n-as-code-v1.46.1-legacy.vsix
 ```
 
-Download it from the [v1.46.1-legacy GitHub release](https://github.com/EtienneLescot/n8n-as-code/releases/tag/v1.46.1-legacy), then disable auto-updates for the `n8n-as-code` extension so VS Code does not upgrade it back to V2.
+3. Disable auto-updates for the `n8n-as-code` extension in VS Code/Cursor so it does not upgrade itself back to V2.
+4. Keep all V1 CLI commands pinned to `n8nac@v1`:
+
+```bash
+npx --yes n8nac@v1 <command>
+```
+
+The legacy VSIX was built to generate agent commands pinned to `n8nac@v1`, avoiding accidental execution of the V2 CLI through `npx --yes n8nac`.
 
 ### Claude Code
 

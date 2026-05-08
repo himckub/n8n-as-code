@@ -6,6 +6,8 @@
 
 Published for both the Microsoft Marketplace and Open VSX.
 
+> **Using V1?** The Marketplace and Open VSX listings now follow the V2 release line. V1 users must install the legacy VSIX manually from the [v1.46.1-legacy GitHub release](https://github.com/EtienneLescot/n8n-as-code/releases/tag/v1.46.1-legacy) and disable extension auto-updates to avoid being upgraded back to V2.
+
 ![n8n-as-code demo](https://raw.githubusercontent.com/EtienneLescot/n8n-as-code/main/res/n8n-as-code.gif)
 
 ---
@@ -38,6 +40,26 @@ npx --yes @n8n-as-code/n8n-manager@next <command>
 ```
 
 Open VSX prereleases are not published; use the stable Open VSX extension unless you install from a local development build.
+
+## V1 Legacy Extension
+
+The V1 editor extension is no longer published through the Microsoft Marketplace or Open VSX listing, because that listing now tracks V2. If your workspace still depends on V1 behavior, install the legacy VSIX manually.
+
+1. Download `n8n-as-code-v1.46.1-legacy.vsix` from the [v1.46.1-legacy GitHub release](https://github.com/EtienneLescot/n8n-as-code/releases/tag/v1.46.1-legacy).
+2. Install the downloaded VSIX:
+
+```bash
+code --install-extension n8n-as-code-v1.46.1-legacy.vsix
+```
+
+3. Disable auto-updates for the `n8n-as-code` extension in VS Code/Cursor so it does not upgrade itself back to V2.
+4. Keep all manual V1 CLI commands pinned to `n8nac@v1`:
+
+```bash
+npx --yes n8nac@v1 <command>
+```
+
+The legacy VSIX is built for V1 workspaces and generates agent commands pinned to `n8nac@v1`, so it will not accidentally execute the V2 CLI through an unpinned `npx --yes n8nac` command.
 
 ---
 
