@@ -2,7 +2,7 @@
 
 # <img src="res/logo.png" alt="n8n-as-code" width="40" height="40"> n8n-as-code
 
-### The n8n IDE for AI agents.
+### The agentic toolkit for n8n.
 
 **VS Code / Cursor Agent · n8n Environments · n8n-manager · GitOps · AI Skills · TypeScript Workflows**
 
