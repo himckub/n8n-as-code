@@ -72,7 +72,7 @@ The configuration UI uses the same model as the CLI: workspace environments are 
 /plugin install n8n-as-code@n8nac-marketplace
 ```
 
-Then ask Claude to initialize n8n-as-code in the workspace. The `n8n-architect` skill uses `n8nac` as the primary interface and `n8n-manager` only for local managed instances, tunnels, and workflow presentation.
+Then ask Claude for the workflow you want. The `n8n-architect` skill handles workspace setup, n8n context, validation, and sync steps as needed.
 
 [Claude setup docs](https://n8nascode.dev/docs/usage/claude-plugin/)
 
@@ -83,6 +83,8 @@ Install the skill from the repository skills directory:
 ```text
 https://github.com/EtienneLescot/n8n-as-code/tree/main/skills
 ```
+
+Then ask your agent for the workflow you want. The skill gives it the n8n schemas, examples, validation rules, and workspace commands it needs to handle the rest.
 
 If your agent asks for an explicit skill path, use `skills/n8n-architect`.
 
