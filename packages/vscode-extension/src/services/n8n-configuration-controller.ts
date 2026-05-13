@@ -119,7 +119,16 @@ export class N8nConfigurationController implements vscode.Disposable {
 
     try {
       let global = await facade.getGlobalConfig();
-      const migration = configService ? new WorkspaceMigrationFacade({ configService }).inspect() : undefined;
+      const migration = hasWorkspaceConfig && configService ? new WorkspaceMigrationFacade({ configService }).inspect() : undefined;
+      if (!hasWorkspaceConfig) {
+        return this.buildSnapshot({
+          workspaceRoot,
+          global,
+          workspace: { version: 3 as const },
+          hasWorkspaceConfig: false,
+          hasValidConnection: false,
+        });
+      }
       if (migration?.operations.some((operation) => operation.id === 'legacy-workspace-config')) {
         return this.buildSnapshot({
           workspaceRoot,
@@ -309,10 +318,8 @@ export class N8nConfigurationController implements vscode.Disposable {
 
   private watchManagerConfigFiles(): void {
     const paths = resolveN8nManagerConfigurationPaths();
-    try {
-      fs.mkdirSync(paths.homeDir, { recursive: true });
-    } catch {
-      // Watcher creation will report failures through the normal refresh path.
+    if (!fs.existsSync(paths.homeDir)) {
+      return;
     }
 
     this.watchFile(paths.homeDir, 'instances.json', 'global-instances-changed');

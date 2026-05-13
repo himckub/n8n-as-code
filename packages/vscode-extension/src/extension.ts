@@ -47,6 +47,7 @@ import { NO_WORKSPACE_ERROR_MESSAGE, OPEN_FOLDER_ACTION } from './constants/work
 import { buildWorkflowQuickPickItems } from './utils/workflow-finder.js';
 import { isClipboardBridgeRequired } from './utils/clipboard-utils.js';
 import { getCanonicalProjectName, getProjectDetail, getProjectDisplayLabel } from './utils/project-display.js';
+import { shouldAutoEnsureAiContext } from './utils/ai-context-policy.js';
 import { IWorkflowStatus } from 'n8nac';
 
 import {
@@ -283,7 +284,10 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         configurationController,
         configurationController.onDidChangeSnapshot((event) => {
-            scheduleEnsureAiContextFresh(context, `snapshot:${event.reason}`, event.snapshot);
+            const workspaceRoot = getWorkspaceRoot();
+            if (shouldAutoEnsureAiContext({ workspaceRoot, snapshot: event.snapshot })) {
+                scheduleEnsureAiContextFresh(context, `snapshot:${event.reason}`, event.snapshot);
+            }
             void handleConfigurationSnapshotChanged(context, event);
         }),
     );
@@ -702,7 +706,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // ── Backend configuration snapshot initialization ────────────────────────
     configurationController.start();
-    scheduleEnsureAiContextFresh(context, 'startup');
 
     // ── Settings change listener ───────────────────────────────────────────
     context.subscriptions.push(
@@ -1995,6 +1998,10 @@ async function doEnsureAiContextFresh(
 ): Promise<void> {
     const workspaceRoot = getWorkspaceRoot();
     if (!workspaceRoot) return;
+    if (!options.force && !shouldAutoEnsureAiContext({ workspaceRoot, snapshot: options.snapshot })) {
+        outputChannel.appendLine(`[n8n] Skipping automatic AI context refresh (${reason}): workspace is not explicitly configured.`);
+        return;
+    }
 
     const connection = resolveAiContextConnection(workspaceRoot);
     const metadata = readAiContextMetadata(workspaceRoot);
@@ -2233,7 +2240,7 @@ async function updateAiContextAfterSyncInitialization(
 ): Promise<void> {
     const currentVersion = versionHint || await resolveAiContextVersion(context, client, undefined, true);
     try {
-        await ensureAiContextFresh(context, 'sync-initialized', { versionHint: currentVersion });
+        await ensureAiContextFresh(context, 'sync-initialized', { force: true, versionHint: currentVersion });
     } catch (error: any) {
         outputChannel.appendLine(`[n8n] Failed to auto-generate AI context: ${error.message}`);
     }
