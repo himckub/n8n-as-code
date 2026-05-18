@@ -1288,6 +1288,7 @@ export class AgentRuntimeController implements vscode.Disposable {
         const [responseText, changed] = await Promise.all([
             this.consumeDeepAgentV3MessagesProjection(run.messages, contextWindowTokens, emitStreamEvent, signal),
             this.consumeDeepAgentV3ToolCallsProjection(run.toolCalls, emitStreamEvent, signal),
+            this.consumeDeepAgentV3ValuesProjection(run.values, emitStreamEvent, signal),
         ]);
         fileModificationDetected = changed;
 
@@ -1420,6 +1421,35 @@ export class AgentRuntimeController implements vscode.Disposable {
             fileModificationDetected = fileModificationDetected || changed;
         }
         return fileModificationDetected;
+    }
+
+    private async consumeDeepAgentV3ValuesProjection(
+        values: AsyncIterable<any>,
+        emitStreamEvent: (event: AgentStreamEvent) => Promise<void>,
+        signal: AbortSignal,
+    ): Promise<void> {
+        let previousTodosKey = '';
+        for await (const value of values) {
+            await this.throwIfAborted(signal);
+            const todos = this.extractTodosFromPayload(value);
+            if (!todos.length) continue;
+            const todosKey = JSON.stringify(todos);
+            if (todosKey === previousTodosKey) continue;
+            previousTodosKey = todosKey;
+            const hasActiveTodo = todos.some((todo) => todo.status === 'in_progress' || todo.status === 'pending');
+            const body = JSON.stringify({ todos });
+            await emitStreamEvent({
+                type: 'operation',
+                operationId: 'write_todos:state',
+                label: 'Write Todos',
+                category: 'todo',
+                status: hasActiveTodo ? 'running' : 'done',
+                body,
+                summary: this.extractTodoSummary({ todos }),
+                startedAt: Date.now(),
+                endedAt: hasActiveTodo ? undefined : Date.now(),
+            });
+        }
     }
 
     private async consumeDeepAgentV3ToolCall(
