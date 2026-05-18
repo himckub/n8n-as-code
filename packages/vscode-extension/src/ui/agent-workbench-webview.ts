@@ -209,10 +209,10 @@ export class AgentWorkbenchWebview {
             return;
         }
 
-        if (payload.type === 'agent.send') {
+        if (payload.type === 'agent.send' || payload.type === 'agent.queue' || payload.type === 'agent.steer') {
             const nodeContexts = this.sanitizeNodeContexts(payload.nodeContexts) || this.sanitizeNodeContexts(payload.nodeContext) || this._nodeContexts;
-            this._outputChannel.appendLine(`[n8n-agent-debug] agent.send workflowId=${this._workflow?.id || 'none'} workflowFilePath=${this._workflowFilePath || 'none'} sessionId=${typeof payload.sessionId === 'string' ? payload.sessionId : 'none'}`);
-            const result = await this._agentRuntime.sendPrompt({
+            this._outputChannel.appendLine(`[n8n-agent-debug] ${payload.type} workflowId=${this._workflow?.id || 'none'} workflowFilePath=${this._workflowFilePath || 'none'} sessionId=${typeof payload.sessionId === 'string' ? payload.sessionId : 'none'}`);
+            const input = {
                 prompt: String(payload.text || ''),
                 workflowId: this._workflow?.id,
                 workflowName: this._workflow?.name,
@@ -222,8 +222,11 @@ export class AgentWorkbenchWebview {
                 nodeContext: nodeContexts[0],
                 nodeContexts,
                 sessionId: typeof payload.sessionId === 'string' ? payload.sessionId : undefined,
-            }, (event) => this.postAgentRuntimeMessage(event));
-            this._outputChannel.appendLine(`[n8n-agent-debug] agent.send completed workflowId=${this._workflow?.id || 'none'} workflowChanged=${String(result.workflowChanged)}`);
+            };
+            const result = payload.type === 'agent.send'
+                ? await this._agentRuntime.sendPrompt(input, (event) => this.postAgentRuntimeMessage(event))
+                : await this._agentRuntime.queuePrompt(input, (event) => this.postAgentRuntimeMessage(event), payload.type === 'agent.steer' ? 'steer' : 'pending');
+            this._outputChannel.appendLine(`[n8n-agent-debug] ${payload.type} completed workflowId=${this._workflow?.id || 'none'} workflowChanged=${String(result.workflowChanged)}`);
             return;
         }
 

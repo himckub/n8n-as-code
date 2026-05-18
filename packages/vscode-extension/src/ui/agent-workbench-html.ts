@@ -616,6 +616,44 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
             align-items: center;
             flex-wrap: wrap;
         }
+        .pending-prompt {
+            display: none;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: center;
+            padding: 6px 7px 6px 9px;
+            border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+            border-radius: 7px;
+            background: color-mix(in srgb, var(--accent) 14%, transparent);
+            color: var(--text);
+            font-size: 12px;
+        }
+        .pending-prompt.open { display: grid; }
+        .pending-prompt-main {
+            display: flex;
+            gap: 7px;
+            align-items: center;
+            min-width: 0;
+        }
+        .pending-prompt-label {
+            flex: 0 0 auto;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0;
+        }
+        .pending-prompt-text {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .pending-prompt button {
+            min-height: 24px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+        }
         .composer-toolbar {
             display: flex;
             gap: 8px;
@@ -1022,6 +1060,7 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
             <form id="composer" class="composer">
                 <div class="composer-input">
                     <div id="context-badges" class="context-badges"></div>
+                    <div id="pending-prompt" class="pending-prompt" aria-live="polite"></div>
                     <div id="mention-menu" class="mention-menu"></div>
                     <textarea id="prompt" placeholder="Ask the n8n agent what to do with this workflow..." rows="2"></textarea>
                     <div class="composer-toolbar">
@@ -1108,6 +1147,7 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
         let reasoningMenuOpen = false;
         let newSessionMenuOpen = false;
         let autoScrollFeed = true;
+        let pendingPrompt = null;
         const expandedDetailKeys = new Set();
 
         const OP_ICONS = {
@@ -1131,6 +1171,7 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
         const feed = document.getElementById('feed');
         const form = document.getElementById('composer');
         const promptInput = document.getElementById('prompt');
+        const pendingPromptEl = document.getElementById('pending-prompt');
         const sendButton = document.getElementById('send');
         const stopButton = document.getElementById('stop');
         const selectModelButton = document.getElementById('select-model');
@@ -1172,7 +1213,7 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
 
         function setRunning(running) {
             isRunning = running;
-            sendButton.disabled = running;
+            sendButton.disabled = false;
             stopButton.disabled = !running;
             stopButton.classList.toggle('active', running);
             newSessionButton.disabled = running;
@@ -1182,6 +1223,29 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
             compactContextButton.disabled = running;
             if (runIndicator) runIndicator.classList.toggle('active', running);
             renderCheckpoints();
+        }
+
+        function renderPendingPrompt() {
+            if (!pendingPromptEl) return;
+            if (!pendingPrompt) {
+                pendingPromptEl.classList.remove('open');
+                pendingPromptEl.innerHTML = '';
+                return;
+            }
+            pendingPromptEl.classList.add('open');
+            pendingPromptEl.innerHTML =
+                '<div class="pending-prompt-main">' +
+                    '<span class="pending-prompt-label">' + (pendingPrompt.mode === 'steering' ? 'Steering' : 'Pending') + '</span>' +
+                    '<span class="pending-prompt-text" title="' + escapeHtml(pendingPrompt.text) + '">' + escapeHtml(pendingPrompt.text) + '</span>' +
+                '</div>' +
+                '<button id="pending-steer" class="secondary small" type="button"' + (pendingPrompt.mode === 'steering' ? ' disabled' : '') + '>Steer</button>';
+            const steerButton = document.getElementById('pending-steer');
+            on(steerButton, 'click', () => {
+                if (!pendingPrompt || !state) return;
+                pendingPrompt = { ...pendingPrompt, mode: 'steering' };
+                renderPendingPrompt();
+                vscode.postMessage({ type: 'agent.steer', text: pendingPrompt.text, workflowId, nodeContexts: currentNodeContexts, sessionId: state.activeSessionId });
+            });
         }
 
         function escapeText(value) {
@@ -2242,6 +2306,10 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
                 entries = entries.filter((entry) => entry.kind !== 'context-usage');
                 state.session.contextUsage = undefined;
                 state.activeSessionId = event.sessionId;
+                if (pendingPrompt && pendingPrompt.text === event.message) {
+                    pendingPrompt = null;
+                    renderPendingPrompt();
+                }
                 const last = entries[entries.length - 1];
                 if (!last || last.kind !== 'user-message' || last.text !== event.message) {
                     entries.push({ kind: 'user-message', id: crypto.randomUUID(), text: event.message || '', timestamp: Date.now() });
@@ -2322,8 +2390,14 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
 
         function sendPrompt() {
             const text = promptInput.value.trim();
-            if (!text || isRunning || !state) return;
+            if (!text || !state) return;
             promptInput.value = '';
+            if (isRunning) {
+                pendingPrompt = { text, mode: 'pending' };
+                renderPendingPrompt();
+                vscode.postMessage({ type: 'agent.queue', text, workflowId, nodeContexts: currentNodeContexts, sessionId: state.activeSessionId });
+                return;
+            }
             vscode.postMessage({ type: 'agent.send', text, workflowId, nodeContexts: currentNodeContexts, sessionId: state.activeSessionId });
         }
 
@@ -2474,6 +2548,12 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
 
             if (message.type === 'agent.status') {
                 setRunning(message.status === 'running' || message.status === 'stopping');
+                return;
+            }
+
+            if (message.type === 'agent.error') {
+                pendingPrompt = null;
+                renderPendingPrompt();
                 return;
             }
 

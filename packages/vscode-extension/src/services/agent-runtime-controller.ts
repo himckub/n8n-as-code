@@ -749,7 +749,8 @@ class WorkbenchSessionService implements SessionServiceHandle {
 }
 
 export class AgentRuntimeController implements vscode.Disposable {
-    private activeRun: { abortController: AbortController; sessionId: string } | undefined;
+    private activeRun: { abortController: AbortController; sessionId: string; abortReason?: 'stop' | 'steer' } | undefined;
+    private queuedPrompt: { input: AgentPromptInput; reason: 'pending' | 'steer' } | undefined;
     private cachedAgentHandle: { key: string; handle: any } | undefined;
     private sessionRuntimePromise: Promise<SessionRuntime> | undefined;
     private checkpointerPromise: Promise<RuntimeCheckpointer> | undefined;
@@ -1088,6 +1089,8 @@ export class AgentRuntimeController implements vscode.Disposable {
         await postMessage({ type: 'agent.status', status: 'running', detail: 'Preparing n8n agent runtime...' });
         await postMessage({ type: 'agent.streamEvent', event: { type: 'start', sessionId: activeRecord.id, message: prompt } });
 
+        let result: AgentRunResult = { workflowChanged: false };
+        let queuedPrompt: { input: AgentPromptInput; reason: 'pending' | 'steer' } | undefined;
         try {
             const runResult = await this.runInitialAgentTurn(promptInput, entries, postMessage, abortController.signal);
             entries = runResult.entries;
@@ -1100,26 +1103,64 @@ export class AgentRuntimeController implements vscode.Disposable {
             this.writeSessionEntries(sessions.service, activeRecord.id, entries);
             await postMessage({ type: 'agent.state', state: await this.getWorkbenchState({ ...input, sessionId: activeRecord.id }) });
             await postMessage({ type: 'agent.done' });
-            return { workflowChanged: runResult.workflowChanged };
+            result = { workflowChanged: runResult.workflowChanged };
         } catch (error: any) {
             const message = error?.message || String(error);
-            this.outputChannel.appendLine(`[n8n-agent] Run failed: ${message}`);
-            const latestEntries = this.withoutContextUsage(this.readSessionEntries(sessions.service, activeRecord.id));
-            const failedEntries = [
-                ...this.finalizePendingOperations(latestEntries, 'error'),
-                this.createSystemNotice(`Run failed: ${message}`),
-            ];
-            this.writeSessionEntries(sessions.service, activeRecord.id, failedEntries);
-            await postMessage({ type: 'agent.streamEvent', event: { type: 'error', error: message } });
-            await postMessage({ type: 'agent.error', message });
-            await postMessage({ type: 'agent.state', state: await this.getWorkbenchState({ ...input, sessionId: activeRecord.id }) });
-            return { workflowChanged: false };
+            if (this.activeRun?.abortController === abortController && this.activeRun.abortReason === 'steer') {
+                this.outputChannel.appendLine(`[n8n-agent-debug] agent runtime steered sessionId=${activeRecord.id}`);
+                const latestEntries = this.withoutContextUsage(this.readSessionEntries(sessions.service, activeRecord.id));
+                this.writeSessionEntries(sessions.service, activeRecord.id, [
+                    ...this.finalizePendingOperations(latestEntries, 'done'),
+                    this.createSystemNotice('Run steered by a newer message.'),
+                ]);
+                await postMessage({ type: 'agent.state', state: await this.getWorkbenchState({ ...input, sessionId: activeRecord.id }) });
+                result = { workflowChanged: false };
+            } else {
+                this.outputChannel.appendLine(`[n8n-agent] Run failed: ${message}`);
+                const latestEntries = this.withoutContextUsage(this.readSessionEntries(sessions.service, activeRecord.id));
+                const failedEntries = [
+                    ...this.finalizePendingOperations(latestEntries, 'error'),
+                    this.createSystemNotice(`Run failed: ${message}`),
+                ];
+                this.writeSessionEntries(sessions.service, activeRecord.id, failedEntries);
+                await postMessage({ type: 'agent.streamEvent', event: { type: 'error', error: message } });
+                await postMessage({ type: 'agent.error', message });
+                await postMessage({ type: 'agent.state', state: await this.getWorkbenchState({ ...input, sessionId: activeRecord.id }) });
+                result = { workflowChanged: false };
+            }
         } finally {
             if (this.activeRun?.abortController === abortController) {
                 this.activeRun = undefined;
             }
-            await postMessage({ type: 'agent.status', status: 'idle' });
+            queuedPrompt = this.queuedPrompt;
+            if (queuedPrompt) {
+                this.queuedPrompt = undefined;
+            } else {
+                await postMessage({ type: 'agent.status', status: 'idle' });
+            }
         }
+        if (queuedPrompt) {
+            const queuedResult = await this.sendPrompt(queuedPrompt.input, postMessage);
+            return { workflowChanged: result.workflowChanged || queuedResult.workflowChanged };
+        }
+        return result;
+    }
+
+    async queuePrompt(input: AgentPromptInput, postMessage: AgentWorkbenchPostMessage, reason: 'pending' | 'steer' = 'pending'): Promise<AgentRunResult> {
+        const prompt = input.prompt.trim();
+        if (!prompt) {
+            return { workflowChanged: false };
+        }
+        if (!this.activeRun) {
+            return this.sendPrompt(input, postMessage);
+        }
+        this.queuedPrompt = { input: { ...input, prompt }, reason };
+        if (reason === 'steer') {
+            this.activeRun.abortReason = 'steer';
+            await postMessage({ type: 'agent.status', status: 'stopping', detail: 'Steering current run...' });
+            this.activeRun.abortController.abort();
+        }
+        return { workflowChanged: false };
     }
 
     async stop(postMessage: AgentWorkbenchPostMessage): Promise<void> {
@@ -1129,6 +1170,7 @@ export class AgentRuntimeController implements vscode.Disposable {
             return;
         }
         await postMessage({ type: 'agent.status', status: 'stopping', detail: 'Stopping current run...' });
+        activeRun.abortReason = 'stop';
         activeRun.abortController.abort();
     }
 
@@ -1182,101 +1224,18 @@ export class AgentRuntimeController implements vscode.Disposable {
         let entries = [...initialEntries];
 
         if (typeof (agent as any).streamEvents === 'function') {
+            let v3Run: any;
+            try {
+                v3Run = await (agent as any).streamEvents({ messages }, { ...config, version: 'v3' });
+            } catch (error: any) {
+                this.outputChannel.appendLine(`[n8n-agent] DeepAgents v3 stream unavailable, falling back to v2: ${error?.message || String(error)}`);
+            }
+            if (this.isDeepAgentV3Run(v3Run)) {
+                return await this.consumeDeepAgentV3Run(v3Run, input, entries, sessions.service, postMessage, signal, contextWindowTokens);
+            }
+
             const stream = (agent as any).streamEvents({ messages }, { ...config, version: 'v2' });
-            const accumulator = this.createStreamAccumulator();
-            let fileModificationDetected = false;
-            const syncEntries = () => {
-                if (!input.sessionId) return;
-                this.writeSessionEntries(sessions.service, input.sessionId, entries);
-            };
-
-            for await (const event of stream) {
-                await this.throwIfAborted(signal);
-                await this.processDeepAgentStreamEvent(event, accumulator, {
-                    contextWindowTokens,
-                    onTextDelta: async (delta: string) => {
-                        entries = this.applyStreamEvent(entries, { type: 'text-delta', delta });
-                        syncEntries();
-                        await postMessage({ type: 'agent.streamEvent', event: { type: 'text-delta', delta } });
-                    },
-                    onOperation: async (operation: any) => {
-                        const streamEvent: AgentStreamEvent = {
-                            type: 'operation',
-                            operationId: String(operation.operationId || randomUUID()),
-                            label: String(operation.label || 'Operation'),
-                            category: String(operation.category || 'tool'),
-                            status: operation.status === 'error' ? 'error' : operation.status === 'done' ? 'done' : 'running',
-                            body: typeof operation.body === 'string' ? operation.body : undefined,
-                            summary: typeof operation.summary === 'string' ? operation.summary : undefined,
-                            startedAt: Number(operation.startedAt || Date.now()),
-                            endedAt: typeof operation.endedAt === 'number' ? operation.endedAt : undefined,
-                        };
-                        entries = this.applyStreamEvent(entries, streamEvent);
-                        syncEntries();
-                        await postMessage({ type: 'agent.streamEvent', event: streamEvent });
-                        if (streamEvent.status === 'done' && streamEvent.category === 'file-write') {
-                            fileModificationDetected = true;
-                        }
-                    },
-                    onCompaction: async (compaction: any) => {
-                        const streamEvent: AgentStreamEvent = {
-                            type: 'compaction',
-                            summary: String(compaction.summary || 'Context compacted'),
-                            source: compaction.source === 'fallback' ? 'fallback' : 'llm',
-                            messagesCompacted: Number(compaction.messagesCompacted || 0),
-                            preservedRecentMessages: Number(compaction.preservedRecentMessages || 0),
-                            estimatedTokens: typeof compaction.estimatedTokens === 'number' ? compaction.estimatedTokens : undefined,
-                            thresholdTokens: typeof compaction.thresholdTokens === 'number' ? compaction.thresholdTokens : undefined,
-                            fallbackReason: typeof compaction.fallbackReason === 'string' ? compaction.fallbackReason : undefined,
-                        };
-                        entries = this.applyStreamEvent(entries, streamEvent);
-                        syncEntries();
-                        await postMessage({ type: 'agent.streamEvent', event: streamEvent });
-                    },
-                    onContextUsage: async (usage: any) => {
-                        if (usage?.source !== 'api') {
-                            return;
-                        }
-                        const streamEvent: AgentStreamEvent = {
-                            type: 'context-usage',
-                            promptTokens: Number(usage.promptTokens || 0),
-                            completionTokens: Number(usage.completionTokens || 0),
-                            contextWindowTokens: Number(usage.contextWindowTokens || contextWindowTokens),
-                            fillPercent: Number(usage.fillPercent || 0),
-                            source: 'api',
-                        };
-                        entries = this.applyStreamEvent(entries, streamEvent);
-                        syncEntries();
-                        await postMessage({ type: 'agent.streamEvent', event: streamEvent });
-                    },
-                });
-            }
-
-            const finalEvent: AgentStreamEvent = {
-                type: 'final',
-                sessionId: input.sessionId || '',
-                response: accumulator.responseText,
-                finalState: 'done',
-            };
-            entries = this.applyStreamEvent(entries, finalEvent);
-            syncEntries();
-            await postMessage({ type: 'agent.streamEvent', event: finalEvent });
-            if (fileModificationDetected) {
-                this.outputChannel.appendLine(`[n8n-agent-debug] agent runtime detected local workflow modification sessionId=${input.sessionId || 'none'} workflowId=${input.workflowId || 'none'} workflowFilePath=${input.workflowFilePath || 'none'}`);
-                try {
-                    await this.maybeSaveWorkbenchCheckpoint(sessions.service, input.sessionId || '', 'after-tool', {
-                        label: 'After file modifications',
-                        summary: 'Saved after file modifications',
-                        payloads: {
-                            surface: this.buildCheckpointSurfacePayload(sessions.service, input.sessionId || '', entries),
-                        },
-                    });
-                } catch (error: any) {
-                    this.outputChannel.appendLine(`[n8n-agent] Auto-checkpoint failed: ${error?.message || String(error)}`);
-                }
-            }
-            this.outputChannel.appendLine(`[n8n-agent-debug] agent runtime completed sessionId=${input.sessionId || 'none'} workflowId=${input.workflowId || 'none'} workflowChanged=${String(fileModificationDetected)}`);
-            return { entries, workflowChanged: fileModificationDetected };
+            return await this.consumeDeepAgentV2Stream(stream, input, entries, sessions.service, postMessage, signal, contextWindowTokens);
         }
 
         const result = await (agent as any).invoke({ messages }, config);
@@ -1290,6 +1249,344 @@ export class AgentRuntimeController implements vscode.Disposable {
         entries = this.applyStreamEvent(entries, finalEvent);
         await postMessage({ type: 'agent.streamEvent', event: finalEvent });
         return { entries, workflowChanged: false };
+    }
+
+    private isDeepAgentV3Run(value: unknown): boolean {
+        return Boolean(value
+            && typeof value === 'object'
+            && Symbol.asyncIterator in Object(value)
+            && 'messages' in Object(value)
+            && 'toolCalls' in Object(value)
+            && 'output' in Object(value));
+    }
+
+    private async consumeDeepAgentV3Run(
+        run: any,
+        input: AgentPromptInput,
+        initialEntries: AgentTimelineEntry[],
+        service: SessionServiceHandle,
+        postMessage: AgentWorkbenchPostMessage,
+        signal: AbortSignal,
+        contextWindowTokens: number,
+    ): Promise<{ entries: AgentTimelineEntry[]; workflowChanged: boolean }> {
+        const accumulator = this.createStreamAccumulator();
+        let entries = [...initialEntries];
+        let fileModificationDetected = false;
+        let finalOutput: unknown;
+        const syncEntries = () => {
+            if (!input.sessionId) return;
+            this.writeSessionEntries(service, input.sessionId, entries);
+        };
+        const emitStreamEvent = async (streamEvent: AgentStreamEvent) => {
+            entries = this.applyStreamEvent(entries, streamEvent);
+            syncEntries();
+            await postMessage({ type: 'agent.streamEvent', event: streamEvent });
+        };
+
+        await Promise.all([
+            this.consumeDeepAgentV3Messages(run, accumulator, emitStreamEvent, signal, contextWindowTokens),
+            this.consumeDeepAgentV3ToolCalls(run, emitStreamEvent, signal, (changed) => {
+                fileModificationDetected = fileModificationDetected || changed;
+            }),
+            (async () => {
+                finalOutput = await run.output;
+            })(),
+        ]);
+
+        await this.throwIfAborted(signal);
+        const finalEvent: AgentStreamEvent = {
+            type: 'final',
+            sessionId: input.sessionId || '',
+            response: accumulator.responseText || this.extractAgentText(finalOutput),
+            finalState: run.interrupted ? 'interrupted' : 'done',
+        };
+        await emitStreamEvent(finalEvent);
+        if (fileModificationDetected) {
+            await this.saveAutoCheckpointAfterFileModification(service, input, entries);
+        }
+        this.outputChannel.appendLine(`[n8n-agent-debug] agent runtime completed sessionId=${input.sessionId || 'none'} workflowId=${input.workflowId || 'none'} stream=v3 workflowChanged=${String(fileModificationDetected)}`);
+        return { entries, workflowChanged: fileModificationDetected };
+    }
+
+    private async consumeDeepAgentV3Messages(
+        run: any,
+        accumulator: { responseText: string; thinkingText: string; thinkingOperationId?: string },
+        emitStreamEvent: (event: AgentStreamEvent) => Promise<void>,
+        signal: AbortSignal,
+        contextWindowTokens: number,
+    ): Promise<void> {
+        for await (const message of run.messages) {
+            await this.throwIfAborted(signal);
+            const thinkingOperationId = `thinking:${randomUUID()}`;
+            await Promise.all([
+                (async () => {
+                    for await (const delta of message.text) {
+                        await this.throwIfAborted(signal);
+                        if (!delta) continue;
+                        accumulator.responseText += delta;
+                        if (accumulator.thinkingText) {
+                            await emitStreamEvent({
+                                type: 'operation',
+                                operationId: accumulator.thinkingOperationId || thinkingOperationId,
+                                label: 'Thinking',
+                                category: 'thinking',
+                                status: 'done',
+                                body: accumulator.thinkingText,
+                                startedAt: Date.now(),
+                                endedAt: Date.now(),
+                            });
+                            accumulator.thinkingText = '';
+                            accumulator.thinkingOperationId = undefined;
+                        }
+                        await emitStreamEvent({ type: 'text-delta', delta });
+                    }
+                })(),
+                (async () => {
+                    for await (const delta of message.reasoning) {
+                        await this.throwIfAborted(signal);
+                        if (!delta) continue;
+                        accumulator.thinkingText += delta;
+                        accumulator.thinkingOperationId ||= thinkingOperationId;
+                        await emitStreamEvent({
+                            type: 'operation',
+                            operationId: accumulator.thinkingOperationId,
+                            label: 'Thinking',
+                            category: 'thinking',
+                            status: 'running',
+                            body: accumulator.thinkingText,
+                            startedAt: Date.now(),
+                        });
+                    }
+                    if (accumulator.thinkingText && accumulator.thinkingOperationId === thinkingOperationId) {
+                        await emitStreamEvent({
+                            type: 'operation',
+                            operationId: thinkingOperationId,
+                            label: 'Thinking',
+                            category: 'thinking',
+                            status: 'done',
+                            body: accumulator.thinkingText,
+                            startedAt: Date.now(),
+                            endedAt: Date.now(),
+                        });
+                        accumulator.thinkingText = '';
+                        accumulator.thinkingOperationId = undefined;
+                    }
+                })(),
+                (async () => {
+                    for await (const usage of message.usage) {
+                        await this.throwIfAborted(signal);
+                        const streamEvent = this.contextUsageEventFromUsage(usage, contextWindowTokens);
+                        if (streamEvent) await emitStreamEvent(streamEvent);
+                    }
+                })(),
+            ]);
+        }
+    }
+
+    private async consumeDeepAgentV3ToolCalls(
+        run: any,
+        emitStreamEvent: (event: AgentStreamEvent) => Promise<void>,
+        signal: AbortSignal,
+        onFileModification: (changed: boolean) => void,
+    ): Promise<void> {
+        for await (const toolCall of run.toolCalls) {
+            await this.throwIfAborted(signal);
+            const toolName = String(toolCall?.name || 'tool');
+            if (!this.shouldShowToolOperation(toolName)) {
+                continue;
+            }
+            const category = this.categorizeTool(toolName);
+            const operationId = `${toolName}:${String(toolCall?.callId || randomUUID())}`;
+            const command = category === 'shell' ? this.extractCommandFromToolPayload(toolCall.input) : undefined;
+            const filePath = category === 'file-read' || category === 'file-write' ? this.extractFilePathFromToolPayload(toolCall.input) : undefined;
+            const todoSummary = category === 'todo' ? this.extractTodoSummary(toolCall.input) : undefined;
+            await emitStreamEvent({
+                type: 'operation',
+                operationId,
+                label: this.formatToolLabel(toolName),
+                category,
+                status: 'running',
+                body: category === 'todo' ? this.stringifyToolPayload(toolCall.input) : command ? `$ ${command}` : this.stringifyToolPayload(toolCall.input),
+                summary: command ? `$ ${command}` : filePath || todoSummary,
+                startedAt: Date.now(),
+            });
+
+            let status: string;
+            let output: unknown;
+            let error: unknown;
+            try {
+                [status, output, error] = await Promise.all([
+                    toolCall.status.catch(() => 'error'),
+                    toolCall.output.catch((caught: unknown) => {
+                        error = caught;
+                        return undefined;
+                    }),
+                    toolCall.error.catch(() => undefined),
+                ]);
+            } catch (caught) {
+                status = 'error';
+                error = caught;
+            }
+            await this.throwIfAborted(signal);
+            const outputText = this.stringifyToolOutput(output) || (error ? String(error) : undefined);
+            const streamEvent: AgentStreamEvent = {
+                type: 'operation',
+                operationId,
+                label: this.formatToolLabel(toolName),
+                category,
+                status: status === 'error' ? 'error' : 'done',
+                summary: this.truncateOperationDetail(outputText) || command || filePath || todoSummary,
+                body: outputText,
+                startedAt: Date.now(),
+                endedAt: Date.now(),
+            };
+            await emitStreamEvent(streamEvent);
+            if (streamEvent.status === 'done' && streamEvent.category === 'file-write') {
+                onFileModification(true);
+            }
+            const compaction = this.extractCompactionSummary(output);
+            if (compaction) {
+                await emitStreamEvent({
+                    type: 'compaction',
+                    summary: compaction.summary,
+                    source: compaction.source,
+                    messagesCompacted: compaction.messagesCompacted,
+                    preservedRecentMessages: compaction.preservedRecentMessages,
+                    estimatedTokens: compaction.estimatedTokens,
+                    thresholdTokens: compaction.thresholdTokens,
+                    fallbackReason: compaction.fallbackReason,
+                });
+            }
+        }
+    }
+
+    private async consumeDeepAgentV2Stream(
+        stream: AsyncIterable<any>,
+        input: AgentPromptInput,
+        initialEntries: AgentTimelineEntry[],
+        service: SessionServiceHandle,
+        postMessage: AgentWorkbenchPostMessage,
+        signal: AbortSignal,
+        contextWindowTokens: number,
+    ): Promise<{ entries: AgentTimelineEntry[]; workflowChanged: boolean }> {
+        const accumulator = this.createStreamAccumulator();
+        let entries = [...initialEntries];
+        let fileModificationDetected = false;
+        const syncEntries = () => {
+            if (!input.sessionId) return;
+            this.writeSessionEntries(service, input.sessionId, entries);
+        };
+
+        for await (const event of stream) {
+            await this.throwIfAborted(signal);
+            await this.processDeepAgentStreamEvent(event, accumulator, {
+                contextWindowTokens,
+                onTextDelta: async (delta: string) => {
+                    entries = this.applyStreamEvent(entries, { type: 'text-delta', delta });
+                    syncEntries();
+                    await postMessage({ type: 'agent.streamEvent', event: { type: 'text-delta', delta } });
+                },
+                onOperation: async (operation: any) => {
+                    const streamEvent: AgentStreamEvent = {
+                        type: 'operation',
+                        operationId: String(operation.operationId || randomUUID()),
+                        label: String(operation.label || 'Operation'),
+                        category: String(operation.category || 'tool'),
+                        status: operation.status === 'error' ? 'error' : operation.status === 'done' ? 'done' : 'running',
+                        body: typeof operation.body === 'string' ? operation.body : undefined,
+                        summary: typeof operation.summary === 'string' ? operation.summary : undefined,
+                        startedAt: Number(operation.startedAt || Date.now()),
+                        endedAt: typeof operation.endedAt === 'number' ? operation.endedAt : undefined,
+                    };
+                    entries = this.applyStreamEvent(entries, streamEvent);
+                    syncEntries();
+                    await postMessage({ type: 'agent.streamEvent', event: streamEvent });
+                    if (streamEvent.status === 'done' && streamEvent.category === 'file-write') {
+                        fileModificationDetected = true;
+                    }
+                },
+                onCompaction: async (compaction: any) => {
+                    const streamEvent: AgentStreamEvent = {
+                        type: 'compaction',
+                        summary: String(compaction.summary || 'Context compacted'),
+                        source: compaction.source === 'fallback' ? 'fallback' : 'llm',
+                        messagesCompacted: Number(compaction.messagesCompacted || 0),
+                        preservedRecentMessages: Number(compaction.preservedRecentMessages || 0),
+                        estimatedTokens: typeof compaction.estimatedTokens === 'number' ? compaction.estimatedTokens : undefined,
+                        thresholdTokens: typeof compaction.thresholdTokens === 'number' ? compaction.thresholdTokens : undefined,
+                        fallbackReason: typeof compaction.fallbackReason === 'string' ? compaction.fallbackReason : undefined,
+                    };
+                    entries = this.applyStreamEvent(entries, streamEvent);
+                    syncEntries();
+                    await postMessage({ type: 'agent.streamEvent', event: streamEvent });
+                },
+                onContextUsage: async (usage: any) => {
+                    if (usage?.source !== 'api') {
+                        return;
+                    }
+                    const streamEvent: AgentStreamEvent = {
+                        type: 'context-usage',
+                        promptTokens: Number(usage.promptTokens || 0),
+                        completionTokens: Number(usage.completionTokens || 0),
+                        contextWindowTokens: Number(usage.contextWindowTokens || contextWindowTokens),
+                        fillPercent: Number(usage.fillPercent || 0),
+                        source: 'api',
+                    };
+                    entries = this.applyStreamEvent(entries, streamEvent);
+                    syncEntries();
+                    await postMessage({ type: 'agent.streamEvent', event: streamEvent });
+                },
+            });
+        }
+
+        const finalEvent: AgentStreamEvent = {
+            type: 'final',
+            sessionId: input.sessionId || '',
+            response: accumulator.responseText,
+            finalState: 'done',
+        };
+        entries = this.applyStreamEvent(entries, finalEvent);
+        syncEntries();
+        await postMessage({ type: 'agent.streamEvent', event: finalEvent });
+        if (fileModificationDetected) {
+            await this.saveAutoCheckpointAfterFileModification(service, input, entries);
+        }
+        this.outputChannel.appendLine(`[n8n-agent-debug] agent runtime completed sessionId=${input.sessionId || 'none'} workflowId=${input.workflowId || 'none'} stream=v2 workflowChanged=${String(fileModificationDetected)}`);
+        return { entries, workflowChanged: fileModificationDetected };
+    }
+
+    private async saveAutoCheckpointAfterFileModification(
+        service: SessionServiceHandle,
+        input: AgentPromptInput,
+        entries: AgentTimelineEntry[],
+    ): Promise<void> {
+        this.outputChannel.appendLine(`[n8n-agent-debug] agent runtime detected local workflow modification sessionId=${input.sessionId || 'none'} workflowId=${input.workflowId || 'none'} workflowFilePath=${input.workflowFilePath || 'none'}`);
+        try {
+            await this.maybeSaveWorkbenchCheckpoint(service, input.sessionId || '', 'after-tool', {
+                label: 'After file modifications',
+                summary: 'Saved after file modifications',
+                payloads: {
+                    surface: this.buildCheckpointSurfacePayload(service, input.sessionId || '', entries),
+                },
+            });
+        } catch (error: any) {
+            this.outputChannel.appendLine(`[n8n-agent] Auto-checkpoint failed: ${error?.message || String(error)}`);
+        }
+    }
+
+    private contextUsageEventFromUsage(usage: any, contextWindowTokens: number): AgentContextUsageEvent | undefined {
+        const promptTokens = Number(usage?.input_tokens ?? usage?.promptTokens ?? usage?.prompt_tokens ?? 0);
+        const completionTokens = Number(usage?.output_tokens ?? usage?.completionTokens ?? usage?.completion_tokens ?? 0);
+        if (!promptTokens && !completionTokens) return undefined;
+        const fillPercent = contextWindowTokens > 0 ? Math.min(100, Math.round((promptTokens / contextWindowTokens) * 100)) : 0;
+        return {
+            type: 'context-usage',
+            promptTokens,
+            completionTokens,
+            contextWindowTokens,
+            fillPercent,
+            source: 'api',
+        };
     }
 
     private truncateOperationDetail(value: unknown): string | undefined {
