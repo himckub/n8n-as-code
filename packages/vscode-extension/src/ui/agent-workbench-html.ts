@@ -518,16 +518,14 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
         .entry-body {
             white-space: pre-wrap;
         }
+        .message-group {
+            display: grid;
+            gap: 6px;
+        }
         .message-actions {
             display: flex;
             justify-content: flex-start;
-            margin-top: 8px;
-            opacity: 0;
-            transition: opacity 120ms ease;
-        }
-        .entry.user:hover .message-actions,
-        .entry.user:focus-within .message-actions {
-            opacity: 1;
+            padding-left: 2px;
         }
         .message-rewind {
             display: inline-grid;
@@ -2275,12 +2273,15 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
         }
 
         function userMessageEntry(entry) {
+            const wrap = document.createElement('div');
+            wrap.className = 'message-group user-message';
             const el = document.createElement('div');
             el.className = 'entry user';
             const body = document.createElement('div');
             body.className = 'entry-body';
             body.textContent = entry.text || '';
             el.appendChild(body);
+            wrap.appendChild(el);
 
             const checkpointId = entry.checkpoint && entry.checkpoint.workbenchCheckpointId;
             if (checkpointId) {
@@ -2295,6 +2296,7 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
                 rewind.innerHTML = '${rewindIcon}';
                 rewind.addEventListener('click', () => {
                     if (!state || !state.activeSessionId || isRunning) return;
+                    rewindMessageOptimistically(entry);
                     vscode.postMessage({
                         type: 'agent.message.rewind',
                         sessionId: state.activeSessionId,
@@ -2302,9 +2304,24 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
                     });
                 });
                 actions.appendChild(rewind);
-                el.appendChild(actions);
+                wrap.appendChild(actions);
             }
-            return el;
+            return wrap;
+        }
+
+        function rewindMessageOptimistically(entry) {
+            if (!state || !state.session || !Array.isArray(state.session.entries)) return;
+            const entries = state.session.entries;
+            const idx = entries.findIndex((candidate) => candidate && candidate.kind === 'user-message' && candidate.id === entry.id);
+            if (idx < 0) return;
+            state.session.entries = entries.slice(0, idx);
+            state.session.contextUsage = undefined;
+            pendingPrompt = null;
+            renderPendingPrompt();
+            promptInput.value = entry.text || '';
+            renderAll();
+            promptInput.focus();
+            promptInput.selectionStart = promptInput.selectionEnd = promptInput.value.length;
         }
 
         function renderAll() {
