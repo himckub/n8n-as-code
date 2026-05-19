@@ -1993,7 +1993,7 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
                 return textEntry('system', entry.text);
             }
             if (entry.kind === 'assistant-body') {
-                return textEntry('assistant' + (entry.streaming ? ' streaming' : ''), entry.text || '');
+                return assistantMessageEntry(entry);
             }
             if (entry.kind === 'context-usage') return document.createComment('context usage');
             if (entry.kind === 'workflow-context' || entry.kind === 'node-context') return document.createComment('context marker');
@@ -2327,6 +2327,29 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
             return wrap;
         }
 
+        function assistantMessageEntry(entry) {
+            const wrap = document.createElement('div');
+            wrap.className = 'message-group assistant-message';
+            const el = textEntry('assistant' + (entry.streaming ? ' streaming' : ''), entry.text || '');
+            wrap.appendChild(el);
+            if (!entry.streaming && entry.text) {
+                const actions = document.createElement('div');
+                actions.className = 'message-actions';
+                const copy = document.createElement('button');
+                copy.type = 'button';
+                copy.className = 'message-action';
+                copy.title = 'Copy response';
+                copy.setAttribute('aria-label', 'Copy response');
+                copy.innerHTML = '${copyIcon}';
+                copy.addEventListener('click', () => {
+                    vscode.postMessage({ type: 'clipboard-write', text: entry.text || '' });
+                });
+                actions.append(copy);
+                wrap.appendChild(actions);
+            }
+            return wrap;
+        }
+
         function rewindMessageOptimistically(entry) {
             if (!state || !state.session || !Array.isArray(state.session.entries)) return;
             const entries = state.session.entries;
@@ -2481,6 +2504,7 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
             state.session.entries = entries;
             pendingPrompt = null;
             renderPendingPrompt();
+            setRunning(false);
             renderAll();
         }
 
@@ -2685,7 +2709,6 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
         on(stopButton, 'click', () => {
             stopButton.disabled = true;
             stopRunOptimistically();
-            setRunning(false);
             vscode.postMessage({ type: 'agent.stop' });
         });
         on(historyOpenButton, 'click', openHistory);

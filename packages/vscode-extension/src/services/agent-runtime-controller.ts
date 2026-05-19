@@ -1166,6 +1166,7 @@ export class AgentRuntimeController implements vscode.Disposable {
         }];
         this.writeSessionEntries(sessions.service, activeRecord.id, entries);
 
+        await postMessage({ type: 'agent.state', state: await this.getWorkbenchState({ ...input, sessionId: activeRecord.id }) });
         await postMessage({ type: 'agent.status', status: 'running', detail: 'Preparing n8n agent runtime...' });
         await postMessage({ type: 'agent.streamEvent', event: { type: 'start', sessionId: activeRecord.id, message: prompt } });
 

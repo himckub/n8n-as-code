@@ -109,6 +109,20 @@ test('Agent Workbench HTML: final stream event releases composer immediately', (
     assert.ok(html.includes("entries = consolidateFinalAssistant(entries, event.response || '', event.finalState);\n                setRunning(false);"), 'Must unlock the composer as soon as the final response arrives');
 });
 
+test('Agent Workbench HTML: stop releases inline message actions immediately', () => {
+    const { buildAgentWorkbenchHtml } = require('../../src/ui/agent-workbench-html.js');
+    const html: string = buildAgentWorkbenchHtml({
+        workflowId: 'wf-1',
+        workflowName: 'Workflow 1',
+        workflowUrl: 'http://localhost:5678/workflow/wf-1',
+        providerModelLabel: 'openai / gpt-5.4',
+    });
+
+    assert.ok(html.includes("function stopRunOptimistically()"), 'Must handle stop optimistically');
+    assert.ok(html.includes("state.session.entries = entries;\n            pendingPrompt = null;\n            renderPendingPrompt();\n            setRunning(false);"), 'Must re-render inline actions as enabled during optimistic stop');
+    assert.ok(!html.includes("stopRunOptimistically();\n            setRunning(false);"), 'Stop click should not rely on a second delayed running-state update');
+});
+
 test('Agent runtime: final response does not wait for post-run checkpoint work', () => {
     const fs = require('node:fs');
     const path = require('node:path');
@@ -117,6 +131,17 @@ test('Agent runtime: final response does not wait for post-run checkpoint work',
     assert.ok(source.includes("await postMessage({ type: 'agent.status', status: 'idle' });\n                postedIdle = true;"), 'Must post idle before slower state refresh work on normal completion');
     assert.ok(source.includes('saveAutoCheckpointAfterFileModificationInBackground'), 'Must keep auto-checkpoints off the response critical path');
     assert.ok(!source.includes('await this.saveAutoCheckpointAfterFileModification(service, input, entries);'), 'Must not await auto-checkpoint after emitting the final response');
+});
+
+test('Agent runtime: start state includes checkpointed user message', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const source = fs.readFileSync(path.join(__dirname, '../../src/services/agent-runtime-controller.ts'), 'utf8');
+
+    const stateIndex = source.indexOf("await postMessage({ type: 'agent.state', state: await this.getWorkbenchState({ ...input, sessionId: activeRecord.id }) });");
+    const startIndex = source.indexOf("await postMessage({ type: 'agent.streamEvent', event: { type: 'start', sessionId: activeRecord.id, message: prompt } });");
+    assert.ok(stateIndex >= 0, 'Must post the checkpointed user-message state before streaming starts');
+    assert.ok(startIndex > stateIndex, 'The start event must follow the checkpointed state so rewind controls exist during a stopped run');
 });
 
 test('Agent Workbench HTML: user messages expose inline checkpoint rewind', () => {
@@ -136,6 +161,21 @@ test('Agent Workbench HTML: user messages expose inline checkpoint rewind', () =
     assert.ok(html.includes("type: 'agent.message.rewind'"), 'Must request a rewind from a user message action');
     assert.ok(html.includes("message.type === 'agent.messageRewind'"), 'Must handle restored prompts from the extension host');
     assert.ok(html.includes('promptInput.focus()'), 'Must focus the composer after rewinding');
+});
+
+test('Agent Workbench HTML: assistant responses expose a copy action dock', () => {
+    const { buildAgentWorkbenchHtml } = require('../../src/ui/agent-workbench-html.js');
+    const html: string = buildAgentWorkbenchHtml({
+        workflowId: 'wf-1',
+        workflowName: 'Workflow 1',
+        workflowUrl: 'http://localhost:5678/workflow/wf-1',
+        providerModelLabel: 'openai / gpt-5.4',
+    });
+
+    assert.ok(html.includes('function assistantMessageEntry(entry)'), 'Must render assistant responses through a message group');
+    assert.ok(html.includes("wrap.className = 'message-group assistant-message'"), 'Must place assistant actions below the response');
+    assert.ok(html.includes("copy.title = 'Copy response'"), 'Must expose copy as the initial assistant action');
+    assert.ok(html.includes("if (!entry.streaming && entry.text)"), 'Must avoid action docks on still-streaming responses');
 });
 
 test('Agent Workbench HTML: context usage and compaction follow agent runtime contracts', () => {
