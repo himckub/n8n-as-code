@@ -51,7 +51,6 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
     const compactIcon = lucideIcon('<path d="M6 12h12"/><path d="m8 4 4 4 4-4"/><path d="m8 20 4-4 4 4"/>');
     const checkpointIcon = lucideIcon('<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>');
     const rewindIcon = lucideIcon('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>');
-    const branchIcon = lucideIcon('<path d="M6 3v7"/><path d="M18 3v4c0 2.8-2.2 5-5 5H6"/><path d="M6 21v-7"/><circle cx="6" cy="12" r="2"/><circle cx="6" cy="3" r="1.5"/><circle cx="6" cy="21" r="1.5"/>');
     const copyIcon = lucideIcon('<rect width="12" height="12" x="8" y="8" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>');
     const sendIcon = lucideIcon('<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>');
     const readOpIcon = lucideIcon('<path d="M12 7v10"/><path d="M17 12H7"/>');
@@ -2291,13 +2290,6 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
             if (checkpointId) {
                 const actions = document.createElement('div');
                 actions.className = 'message-actions';
-                const branch = document.createElement('button');
-                branch.type = 'button';
-                branch.className = 'message-action';
-                branch.title = 'Fork from here';
-                branch.setAttribute('aria-label', 'Fork from here');
-                branch.disabled = true;
-                branch.innerHTML = '${branchIcon}';
                 const rewind = document.createElement('button');
                 rewind.type = 'button';
                 rewind.className = 'message-action message-rewind';
@@ -2319,9 +2311,11 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
                 copy.className = 'message-action';
                 copy.title = 'Copy message';
                 copy.setAttribute('aria-label', 'Copy message');
-                copy.disabled = true;
                 copy.innerHTML = '${copyIcon}';
-                actions.append(branch, rewind, copy);
+                copy.addEventListener('click', () => {
+                    vscode.postMessage({ type: 'clipboard-write', text: entry.text || '' });
+                });
+                actions.append(rewind, copy);
                 wrap.appendChild(actions);
             }
             return wrap;
