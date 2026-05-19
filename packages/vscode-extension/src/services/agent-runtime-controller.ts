@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { WorkspaceSnapshotService } from './workspace-snapshot-service.js';
 
 export interface AgentPromptInput {
     prompt: string;
@@ -775,11 +776,16 @@ export class AgentRuntimeController implements vscode.Disposable {
     private cachedAgentHandle: { key: string; handle: any } | undefined;
     private sessionRuntimePromise: Promise<SessionRuntime> | undefined;
     private checkpointerPromise: Promise<RuntimeCheckpointer> | undefined;
+    private readonly workspaceSnapshots: WorkspaceSnapshotService;
 
     constructor(
         private readonly _context: vscode.ExtensionContext,
         private readonly outputChannel: vscode.OutputChannel,
-    ) {}
+    ) {
+        this.workspaceSnapshots = new WorkspaceSnapshotService(_context.globalStorageUri.fsPath, (message) => {
+            outputChannel.appendLine(message);
+        });
+    }
 
     async getWorkbenchState(input: Omit<AgentPromptInput, 'prompt'>): Promise<AgentWorkbenchState> {
         const scope = this.getSessionScope(input);
@@ -997,6 +1003,7 @@ export class AgentRuntimeController implements vscode.Disposable {
         }
 
         const result = await sessions.service.restoreCheckpoint(sessionId, checkpointId);
+        await this.workspaceSnapshots.restore(input.workspaceRoot, target.checkpoint?.workspaceSnapshotId);
         const payloads = this.extractCheckpointPayloads(result);
         const surface = payloads.surface;
         if (this.isWorkbenchSurfacePayload(surface)) {
@@ -1144,15 +1151,16 @@ export class AgentRuntimeController implements vscode.Disposable {
         sessions.service.setTitle(activeRecord.id, derivedTitle);
 
         let entries = this.withoutContextUsage(this.readSessionEntries(sessions.service, activeRecord.id));
-        const beforeMessageCheckpoint = await this.saveBeforeUserMessageCheckpoint(sessions.service, activeRecord.id, entries, prompt);
+        const beforeMessageCheckpoint = await this.saveBeforeUserMessageCheckpoint(sessions.service, activeRecord.id, entries, prompt, input.workspaceRoot);
         entries = [...entries, {
             kind: 'user-message',
             id: randomUUID(),
             text: prompt,
             timestamp: Date.now(),
             checkpoint: {
-                workbenchCheckpointId: beforeMessageCheckpoint.id,
-                runtimeCheckpointId: beforeMessageCheckpoint.runtimeCheckpointId,
+                workbenchCheckpointId: beforeMessageCheckpoint.checkpoint.id,
+                runtimeCheckpointId: beforeMessageCheckpoint.checkpoint.runtimeCheckpointId,
+                workspaceSnapshotId: beforeMessageCheckpoint.workspaceSnapshotId,
             },
         }];
         this.writeSessionEntries(sessions.service, activeRecord.id, entries);
@@ -2936,11 +2944,13 @@ export class AgentRuntimeController implements vscode.Disposable {
         sessionId: string,
         entries: AgentTimelineEntry[],
         prompt: string,
-    ): Promise<SessionCheckpointMetadata> {
+        workspaceRoot: string | undefined,
+    ): Promise<{ checkpoint: SessionCheckpointMetadata; workspaceSnapshotId?: string }> {
         service.setCheckpointer(await this.createPersistentCheckpointer());
+        const workspaceSnapshotId = await this.workspaceSnapshots.capture(workspaceRoot, 'Before user message');
         const surface = this.buildCheckpointSurfacePayload(service, sessionId, entries);
         const promptPreview = prompt.length > 80 ? `${prompt.slice(0, 77)}...` : prompt;
-        return this.saveWorkbenchCheckpoint(service, sessionId, {
+        const checkpoint = await this.saveWorkbenchCheckpoint(service, sessionId, {
             reason: 'manual',
             label: 'Before user message',
             summary: promptPreview ? `Before "${promptPreview}"` : 'Before user message',
@@ -2948,6 +2958,7 @@ export class AgentRuntimeController implements vscode.Disposable {
                 surface,
             },
         });
+        return { checkpoint, workspaceSnapshotId };
     }
 
     private async maybeSaveWorkbenchCheckpoint(
