@@ -1324,16 +1324,8 @@ export class AgentRuntimeController implements vscode.Disposable {
         let entries = [...initialEntries];
 
         if (typeof (agent as any).streamEvents === 'function') {
-            let v3Run: any;
-            try {
-                v3Run = await this.raceAbort(Promise.resolve((agent as any).streamEvents({ messages }, { ...config, version: 'v3' })), signal);
-            } catch (error: any) {
-                this.outputChannel.appendLine(`[n8n-agent] DeepAgents v3 stream unavailable, falling back to v2: ${error?.message || String(error)}`);
-            }
-            if (this.isDeepAgentV3Run(v3Run)) {
-                return await this.raceAbort(this.consumeDeepAgentV3Run(v3Run, input, entries, sessions.service, postMessage, signal, contextWindowTokens), signal);
-            }
-
+            // The v3 DeepAgents run projections can remain open after visible text is complete,
+            // which keeps the Workbench in a running state. Use the linear v2 event stream here.
             const stream = (agent as any).streamEvents({ messages }, { ...config, version: 'v2' });
             return await this.raceAbort(this.consumeDeepAgentV2Stream(stream, input, entries, sessions.service, postMessage, signal, contextWindowTokens), signal);
         }

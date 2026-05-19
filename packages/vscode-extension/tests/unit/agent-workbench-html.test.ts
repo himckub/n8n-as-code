@@ -129,11 +129,18 @@ test('Agent runtime: final response does not wait for post-run checkpoint work',
     const source = fs.readFileSync(path.join(__dirname, '../../src/services/agent-runtime-controller.ts'), 'utf8');
 
     assert.ok(source.includes("await postMessage({ type: 'agent.status', status: 'idle' });\n                postedIdle = true;"), 'Must post idle before slower state refresh work on normal completion');
-    assert.ok(source.includes('const finalOutput = responseText ? undefined : await this.resolveWithTimeout(finalOutputPromise, 1000, undefined);'), 'Must not wait for DeepAgents final output when visible response text already streamed');
-    assert.ok(source.includes('await this.waitForDeepAgentV3Sidecars([toolCallsProjection, valuesProjection], 250);'), 'Must not let DeepAgents side projections keep the composer running indefinitely');
-    assert.ok(source.includes('await this.resolveWithTimeout(finalOutputPromise, 1000, undefined)'), 'Must bound final-output fallback waits');
     assert.ok(source.includes('saveAutoCheckpointAfterFileModificationInBackground'), 'Must keep auto-checkpoints off the response critical path');
     assert.ok(!source.includes('await this.saveAutoCheckpointAfterFileModification(service, input, entries);'), 'Must not await auto-checkpoint after emitting the final response');
+});
+
+test('Agent runtime: workbench uses the linear DeepAgents event stream', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const source = fs.readFileSync(path.join(__dirname, '../../src/services/agent-runtime-controller.ts'), 'utf8');
+
+    assert.ok(source.includes("version: 'v2'"), 'Workbench runs must use the linear event stream');
+    assert.ok(source.includes('consumeDeepAgentV2Stream(stream, input, entries, sessions.service, postMessage, signal, contextWindowTokens)'), 'Must consume the linear event stream directly');
+    assert.ok(!source.includes("streamEvents({ messages }, { ...config, version: 'v3' })"), 'Must not start the v3 projection stream for Workbench runs');
 });
 
 test('Agent Workbench state delivery: runtime states are lightweight and ordered', () => {
