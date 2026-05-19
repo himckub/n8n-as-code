@@ -18,6 +18,7 @@ export interface AgentPromptInput {
 const ENVIRONMENT_DETAILS_BLOCK_PATTERN = /<environment_details>[\s\S]*?<\/environment_details>/gi;
 const UNATTACHED_WORKFLOW_SCOPE_KEY = '__unattached__';
 const DEFAULT_CONTEXT_WINDOW_TOKENS = 200_000;
+const INVALID_TOOL_CALL_RECOVERY_MARKER = 'N8N_INVALID_TOOL_CALL_RECOVERY';
 
 export interface AgentNodeContext {
     name: string;
@@ -1366,16 +1367,38 @@ export class AgentRuntimeController implements vscode.Disposable {
     ): Promise<string> {
         const accumulator = this.createStreamAccumulator();
         const key = String(message?.id || message?.runId || message?.node || randomUUID());
+        let pendingText = '';
+        let isInternalRecoveryMessage = false;
+        let textVisibilityResolved = false;
+        const emitVisibleTextDelta = async (delta: string) => {
+            if (accumulator.thinkingText) {
+                await this.finishThinkingOperation(accumulator, emitStreamEvent);
+            }
+            accumulator.responseText += delta;
+            await emitStreamEvent({ type: 'text-delta', delta });
+        };
         await Promise.all([
             (async () => {
                 for await (const delta of message.text || []) {
                     await this.throwIfAborted(signal);
                     if (typeof delta !== 'string' || !delta) continue;
-                    if (accumulator.thinkingText) {
-                        await this.finishThinkingOperation(accumulator, emitStreamEvent);
+                    if (isInternalRecoveryMessage) continue;
+                    if (!textVisibilityResolved) {
+                        pendingText += delta;
+                        if (INVALID_TOOL_CALL_RECOVERY_MARKER.startsWith(pendingText) && pendingText.length < INVALID_TOOL_CALL_RECOVERY_MARKER.length) {
+                            continue;
+                        }
+                        textVisibilityResolved = true;
+                        if (pendingText.startsWith(INVALID_TOOL_CALL_RECOVERY_MARKER)) {
+                            isInternalRecoveryMessage = true;
+                            pendingText = '';
+                            continue;
+                        }
+                        await emitVisibleTextDelta(pendingText);
+                        pendingText = '';
+                        continue;
                     }
-                    accumulator.responseText += delta;
-                    await emitStreamEvent({ type: 'text-delta', delta });
+                    await emitVisibleTextDelta(delta);
                 }
             })(),
             (async () => {
