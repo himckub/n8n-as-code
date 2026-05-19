@@ -497,8 +497,10 @@ export class AgentWorkbenchWebview {
         this._nodeContexts = Array.isArray(nextState.currentNodeContexts) ? nextState.currentNodeContexts : [];
         if (!enrich) {
             await this._panel.webview.postMessage({ type: 'agent.state', state: nextState, stateSequence });
-            void this.postWorkbenchState(nextState, { enrich: true })
-                .catch((error) => this._outputChannel.appendLine(`[n8n-agent] Background Workbench state enrichment failed: ${error?.message || String(error)}`));
+            if (!nextState.isRunning) {
+                void this.postWorkbenchState(undefined, { enrich: true })
+                    .catch((error) => this._outputChannel.appendLine(`[n8n-agent] Background Workbench state enrichment failed: ${error?.message || String(error)}`));
+            }
             return;
         }
         await this.reconcileWorkflowContext(nextState.workflowContext);

@@ -1385,15 +1385,22 @@ export class AgentRuntimeController implements vscode.Disposable {
             await postMessage({ type: 'agent.streamEvent', event: streamEvent });
         };
 
-        const [responseText, changed] = await Promise.all([
-            this.consumeDeepAgentV3MessagesProjection(run.messages, contextWindowTokens, emitStreamEvent, signal),
-            this.consumeDeepAgentV3ToolCallsProjection(run.toolCalls, emitStreamEvent, signal),
-            this.consumeDeepAgentV3ValuesProjection(run.values, emitStreamEvent, signal),
-        ]);
-        fileModificationDetected = changed;
+        const toolCallsProjection = this.consumeDeepAgentV3ToolCallsProjection(run.toolCalls, emitStreamEvent, signal)
+            .then((changed) => {
+                fileModificationDetected = fileModificationDetected || changed;
+            })
+            .catch((error: any) => {
+                if (!signal.aborted) this.outputChannel.appendLine(`[n8n-agent] DeepAgents v3 tool projection failed: ${error?.message || String(error)}`);
+            });
+        const valuesProjection = this.consumeDeepAgentV3ValuesProjection(run.values, emitStreamEvent, signal)
+            .catch((error: any) => {
+                if (!signal.aborted) this.outputChannel.appendLine(`[n8n-agent] DeepAgents v3 values projection failed: ${error?.message || String(error)}`);
+            });
+        const responseText = await this.consumeDeepAgentV3MessagesProjection(run.messages, contextWindowTokens, emitStreamEvent, signal);
+        await this.waitForDeepAgentV3Sidecars([toolCallsProjection, valuesProjection], 250);
 
         await this.throwIfAborted(signal);
-        const finalOutput = responseText ? undefined : await finalOutputPromise;
+        const finalOutput = responseText ? undefined : await this.resolveWithTimeout(finalOutputPromise, 1000, undefined);
         const finalResponse = responseText
             || this.extractAssistantTextFromAgentOutput(finalOutput)
             || this.buildToolOnlyCompletionResponse(entries);
@@ -1409,6 +1416,34 @@ export class AgentRuntimeController implements vscode.Disposable {
         }
         this.outputChannel.appendLine(`[n8n-agent-debug] agent runtime completed sessionId=${input.sessionId || 'none'} workflowId=${input.workflowId || 'none'} stream=v3 workflowChanged=${String(fileModificationDetected)}`);
         return { entries, workflowChanged: fileModificationDetected };
+    }
+
+    private async waitForDeepAgentV3Sidecars(promises: Array<Promise<void>>, timeoutMs: number): Promise<void> {
+        let timeout: NodeJS.Timeout | undefined;
+        try {
+            await Promise.race([
+                Promise.allSettled(promises).then(() => undefined),
+                new Promise<void>((resolve) => {
+                    timeout = setTimeout(resolve, timeoutMs);
+                }),
+            ]);
+        } finally {
+            if (timeout) clearTimeout(timeout);
+        }
+    }
+
+    private async resolveWithTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+        let timeout: NodeJS.Timeout | undefined;
+        try {
+            return await Promise.race([
+                promise,
+                new Promise<T>((resolve) => {
+                    timeout = setTimeout(() => resolve(fallback), timeoutMs);
+                }),
+            ]);
+        } finally {
+            if (timeout) clearTimeout(timeout);
+        }
     }
 
     private buildToolOnlyCompletionResponse(entries: AgentTimelineEntry[]): string {

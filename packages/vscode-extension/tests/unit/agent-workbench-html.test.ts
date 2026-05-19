@@ -129,7 +129,9 @@ test('Agent runtime: final response does not wait for post-run checkpoint work',
     const source = fs.readFileSync(path.join(__dirname, '../../src/services/agent-runtime-controller.ts'), 'utf8');
 
     assert.ok(source.includes("await postMessage({ type: 'agent.status', status: 'idle' });\n                postedIdle = true;"), 'Must post idle before slower state refresh work on normal completion');
-    assert.ok(source.includes('const finalOutput = responseText ? undefined : await finalOutputPromise;'), 'Must not wait for DeepAgents final output when visible response text already streamed');
+    assert.ok(source.includes('const finalOutput = responseText ? undefined : await this.resolveWithTimeout(finalOutputPromise, 1000, undefined);'), 'Must not wait for DeepAgents final output when visible response text already streamed');
+    assert.ok(source.includes('await this.waitForDeepAgentV3Sidecars([toolCallsProjection, valuesProjection], 250);'), 'Must not let DeepAgents side projections keep the composer running indefinitely');
+    assert.ok(source.includes('await this.resolveWithTimeout(finalOutputPromise, 1000, undefined)'), 'Must bound final-output fallback waits');
     assert.ok(source.includes('saveAutoCheckpointAfterFileModificationInBackground'), 'Must keep auto-checkpoints off the response critical path');
     assert.ok(!source.includes('await this.saveAutoCheckpointAfterFileModification(service, input, entries);'), 'Must not await auto-checkpoint after emitting the final response');
 });
@@ -141,7 +143,8 @@ test('Agent Workbench state delivery: runtime states are lightweight and ordered
 
     assert.ok(source.includes('private _stateSequence = 0;'), 'Must version Workbench state messages');
     assert.ok(source.includes("await this._panel.webview.postMessage({ type: 'agent.state', state: nextState, stateSequence });"), 'Must send critical runtime state before enrichment');
-    assert.ok(source.includes("void this.postWorkbenchState(nextState, { enrich: true })"), 'Must move heavy state enrichment off the run critical path');
+    assert.ok(source.includes('if (!nextState.isRunning)'), 'Must not enrich stale runtime snapshots while a run is active');
+    assert.ok(source.includes("void this.postWorkbenchState(undefined, { enrich: true })"), 'Must refresh state before background enrichment instead of reusing a stale snapshot');
     assert.ok(source.includes('await this.postWorkbenchState(message.state, { enrich: false });'), 'Runtime state messages should use the lightweight path');
 });
 
@@ -188,6 +191,7 @@ test('Agent Workbench HTML: stale state cannot undo a local rewind', () => {
     assert.ok(html.includes('rewoundMessageIds.add(entry.id);'), 'Must mark the target message before waiting for host confirmation');
     assert.ok(html.includes('function acceptIncomingStateMessage(message)'), 'Must gate incoming state messages');
     assert.ok(html.includes('if (incomingStateContainsRewoundMessage(message.state)) return false;'), 'Must ignore late states that contain rewound messages');
+    assert.ok(html.includes('if (incomingStateDropsLiveEntries(message.state)) return false;'), 'Must ignore stale states that would erase live streamed content');
     assert.ok(html.includes('if (sequence && sequence < lastStateSequence) return false;'), 'Must ignore out-of-order state updates');
 });
 

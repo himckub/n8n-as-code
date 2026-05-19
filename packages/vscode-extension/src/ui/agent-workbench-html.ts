@@ -2383,10 +2383,23 @@ export function buildAgentWorkbenchHtml(input: AgentWorkbenchHtmlInput): string 
             return nextState.session.entries.some((entry) => entry && entry.kind === 'user-message' && rewoundMessageIds.has(entry.id));
         }
 
+        function incomingStateDropsLiveEntries(nextState) {
+            if (!state || !state.session || !nextState || !nextState.session) return false;
+            if (state.activeSessionId !== nextState.activeSessionId) return false;
+            const currentEntries = Array.isArray(state.session.entries) ? state.session.entries : [];
+            const nextEntries = Array.isArray(nextState.session.entries) ? nextState.session.entries : [];
+            if (nextEntries.length >= currentEntries.length) return false;
+            const hasLiveEntry = currentEntries.some((entry) =>
+                entry && ((entry.kind === 'assistant-body' && entry.streaming) || (entry.kind === 'operation' && entry.status === 'running'))
+            );
+            return isRunning || hasLiveEntry;
+        }
+
         function acceptIncomingStateMessage(message) {
             const sequence = Number(message.stateSequence || 0);
             if (sequence && sequence < lastStateSequence) return false;
             if (incomingStateContainsRewoundMessage(message.state)) return false;
+            if (incomingStateDropsLiveEntries(message.state)) return false;
             if (sequence) lastStateSequence = sequence;
             return true;
         }
