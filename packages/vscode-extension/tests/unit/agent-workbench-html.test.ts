@@ -152,7 +152,8 @@ test('Agent runtime: workbench uses the native DeepAgents v3 run stream', () => 
     assert.ok(source.includes('message.text'), 'Must read the native message.text projection');
     assert.ok(source.includes('message.reasoning'), 'Must read the native message.reasoning projection');
     assert.ok(source.includes('message.usage'), 'Must read the native message.usage projection');
-    assert.ok(source.includes('message.output'), 'Must await each native message output to detect visible completion');
+    assert.ok(source.includes("eventName === 'content-block-finish'"), 'Must use native message lifecycle events to detect visible text completion');
+    assert.ok(source.includes('extractContentBlockText(content)'), 'Must finalize visible answers from the completed text block');
     assert.ok(source.includes('onFinalCandidate'), 'Must emit a visible final response from native message projections');
     assert.ok(source.includes('runtimeFinalizing'), 'Must distinguish visible completion from authoritative run.output completion');
     assert.ok(source.includes('visibleDone'), 'Must let follow-up prompts queue once the visible answer is complete');

@@ -1370,13 +1370,13 @@ export class AgentRuntimeController implements vscode.Disposable {
         const accumulator = this.createStreamAccumulator();
         let entries = [...initialEntries];
         let fileModificationDetected = false;
-        let finalEmitted = false;
+        let visibleFinalEmitted = false;
+        let authoritativeFinalEmitted = false;
         const syncEntries = () => {
             if (!input.sessionId) return;
             this.writeSessionEntries(service, input.sessionId, entries);
         };
         const emitStreamEvent = async (streamEvent: AgentStreamEvent) => {
-            if (finalEmitted && streamEvent.type !== 'final') return;
             entries = this.applyStreamEvent(entries, streamEvent);
             syncEntries();
             await postMessage({ type: 'agent.streamEvent', event: streamEvent });
@@ -1385,10 +1385,16 @@ export class AgentRuntimeController implements vscode.Disposable {
             }
         };
         const emitFinalEvent = async (response: string, finalState: string, runtimeFinalizing: boolean) => {
-            if (finalEmitted) return;
-            finalEmitted = true;
+            if (runtimeFinalizing) {
+                if (visibleFinalEmitted) return;
+                visibleFinalEmitted = true;
+            } else {
+                if (authoritativeFinalEmitted) return;
+                authoritativeFinalEmitted = true;
+                visibleFinalEmitted = true;
+            }
             const activeRun = this.activeRun;
-            if (runtimeFinalizing && activeRun && activeRun.sessionId === input.sessionId) {
+            if (activeRun && activeRun.sessionId === input.sessionId) {
                 activeRun.visibleDone = true;
             }
             const finalEvent: AgentStreamEvent = {
@@ -1478,6 +1484,11 @@ export class AgentRuntimeController implements vscode.Disposable {
             onFinalCandidate: (response: string) => Promise<void>;
         },
     ): Promise<void> {
+        if (this.isAsyncIterable(message)) {
+            await this.consumeDeepAgentV3MessageEvents(message, accumulator, callbacks);
+            return;
+        }
+
         const messageKey = `message:${randomUUID()}`;
         const [, messageText, , output] = await Promise.all([
             this.consumeDeepAgentV3MessageReasoning(message, messageKey, accumulator, callbacks),
@@ -1503,6 +1514,139 @@ export class AgentRuntimeController implements vscode.Disposable {
         if (finalText.trim() && !this.messageHasToolCalls(output)) {
             await callbacks.onFinalCandidate(this.sanitizeAssistantText(finalText));
         }
+    }
+
+    private async consumeDeepAgentV3MessageEvents(
+        message: AsyncIterable<any>,
+        accumulator: { responseText: string; thinkingText: string; thinkingOperationId?: string },
+        callbacks: {
+            signal: AbortSignal;
+            contextWindowTokens: number;
+            onStreamEvent: (event: AgentStreamEvent) => Promise<void>;
+            onFinalCandidate: (response: string) => Promise<void>;
+        },
+    ): Promise<void> {
+        // `message.text` resolves at message-finish; the UI needs the completed
+        // visible text block so the spinner is not tied to post-text finalization.
+        const messageKey = `message:${randomUUID()}`;
+        const blockText = new Map<number, string>();
+        let messageText = '';
+        let hasToolCall = false;
+        let visibleFinalEmitted = false;
+
+        const emitThinkingDone = async () => {
+            if (!accumulator.thinkingText) return;
+            await callbacks.onStreamEvent({
+                type: 'operation',
+                operationId: accumulator.thinkingOperationId || `thinking:${messageKey}`,
+                label: 'Thinking',
+                category: 'thinking',
+                status: 'done',
+                body: accumulator.thinkingText,
+                startedAt: Date.now(),
+                endedAt: Date.now(),
+            });
+            accumulator.thinkingText = '';
+            accumulator.thinkingOperationId = undefined;
+        };
+        const emitTextDelta = async (delta: string, blockIndex?: number) => {
+            if (!delta) return;
+            await emitThinkingDone();
+            accumulator.responseText += delta;
+            messageText += delta;
+            if (typeof blockIndex === 'number') {
+                blockText.set(blockIndex, `${blockText.get(blockIndex) || ''}${delta}`);
+            }
+            await callbacks.onStreamEvent({ type: 'text-delta', delta });
+        };
+        const emitReasoningDelta = async (delta: string) => {
+            if (!delta) return;
+            accumulator.thinkingText += delta;
+            accumulator.thinkingOperationId ||= `thinking:${messageKey}`;
+            await callbacks.onStreamEvent({
+                type: 'operation',
+                operationId: accumulator.thinkingOperationId,
+                label: 'Thinking',
+                category: 'thinking',
+                status: 'running',
+                body: accumulator.thinkingText,
+                startedAt: Date.now(),
+            });
+        };
+        const emitVisibleFinal = async () => {
+            const finalText = this.sanitizeAssistantText(messageText);
+            if (visibleFinalEmitted || hasToolCall || !finalText) return;
+            visibleFinalEmitted = true;
+            await emitThinkingDone();
+            await callbacks.onFinalCandidate(finalText);
+        };
+
+        for await (const event of message) {
+            await this.throwIfAborted(callbacks.signal);
+            if (!this.isRecord(event)) continue;
+            const eventName = String(event.event || '');
+            if (eventName === 'message-start') {
+                const usageEvent = this.contextUsageEventFromUsage(event.usage, callbacks.contextWindowTokens);
+                if (usageEvent) await callbacks.onStreamEvent(usageEvent);
+                continue;
+            }
+            if (eventName === 'usage') {
+                const usageEvent = this.contextUsageEventFromUsage(event.usage, callbacks.contextWindowTokens);
+                if (usageEvent) await callbacks.onStreamEvent(usageEvent);
+                continue;
+            }
+            if (eventName === 'content-block-start') {
+                const content = event.content;
+                if (this.isToolContentBlock(content)) {
+                    hasToolCall = true;
+                }
+                await emitTextDelta(this.extractContentBlockText(content), this.readMessageEventIndex(event));
+                await emitReasoningDelta(this.extractContentBlockReasoning(content));
+                continue;
+            }
+            if (eventName === 'content-block-delta') {
+                const delta = event.delta || event.content;
+                if (this.isToolContentBlock(delta) || this.isToolContentBlock(this.isRecord(delta) ? delta.fields : undefined)) {
+                    hasToolCall = true;
+                }
+                await emitTextDelta(this.extractContentBlockText(delta), this.readMessageEventIndex(event));
+                await emitReasoningDelta(this.extractContentBlockReasoning(delta));
+                continue;
+            }
+            if (eventName === 'content-block-finish') {
+                const content = event.content;
+                if (this.isToolContentBlock(content)) {
+                    hasToolCall = true;
+                }
+                const index = this.readMessageEventIndex(event);
+                const finalBlockText = this.extractContentBlockText(content);
+                if (finalBlockText) {
+                    const currentBlockText = typeof index === 'number' ? blockText.get(index) || '' : '';
+                    const missingText = currentBlockText && finalBlockText.startsWith(currentBlockText)
+                        ? finalBlockText.slice(currentBlockText.length)
+                        : currentBlockText ? '' : finalBlockText;
+                    await emitTextDelta(missingText, index);
+                    await emitVisibleFinal();
+                }
+                if (this.extractContentBlockReasoning(content)) {
+                    await emitThinkingDone();
+                }
+                continue;
+            }
+            if (eventName === 'message-finish') {
+                const usageEvent = this.contextUsageEventFromUsage(event.usage, callbacks.contextWindowTokens);
+                if (usageEvent) await callbacks.onStreamEvent(usageEvent);
+                await emitVisibleFinal();
+                await emitThinkingDone();
+                continue;
+            }
+            if (eventName === 'error') {
+                throw new Error(String(event.message || 'DeepAgents message stream failed'));
+            }
+        }
+
+        await emitVisibleFinal();
+        await emitThinkingDone();
     }
 
     private async consumeDeepAgentV3MessageReasoning(
@@ -2139,6 +2283,54 @@ export class AgentRuntimeController implements vscode.Disposable {
     private extractMessageTextFromOutput(output: unknown): string {
         if (!this.isRecord(output)) return '';
         return this.sanitizeAssistantText(this.extractMessageTextContent(output.content));
+    }
+
+    private readMessageEventIndex(event: Record<string, unknown>): number | undefined {
+        const index = Number(event.index);
+        return Number.isFinite(index) ? index : undefined;
+    }
+
+    private extractContentBlockText(value: unknown): string {
+        if (!this.isRecord(value)) return '';
+        const type = String(value.type || '').toLowerCase();
+        if ((type === 'text' || type === 'text-delta') && typeof value.text === 'string') {
+            return value.text;
+        }
+        if (this.isRecord(value.fields)) {
+            return this.extractContentBlockText(value.fields);
+        }
+        if (this.isRecord(value.content)) {
+            return this.extractContentBlockText(value.content);
+        }
+        return '';
+    }
+
+    private extractContentBlockReasoning(value: unknown): string {
+        if (!this.isRecord(value)) return '';
+        const type = String(value.type || '').toLowerCase();
+        if ((type === 'reasoning' || type === 'reasoning-delta') && typeof value.reasoning === 'string') {
+            return value.reasoning;
+        }
+        if (type === 'thinking' && typeof value.thinking === 'string') {
+            return value.thinking;
+        }
+        if (this.isRecord(value.fields)) {
+            return this.extractContentBlockReasoning(value.fields);
+        }
+        if (this.isRecord(value.content)) {
+            return this.extractContentBlockReasoning(value.content);
+        }
+        return '';
+    }
+
+    private isToolContentBlock(value: unknown): boolean {
+        if (!this.isRecord(value)) return false;
+        const type = String(value.type || '').toLowerCase();
+        if (type.includes('tool') || type === 'input_json_delta') return true;
+        for (const key of ['tool_calls', 'toolCalls', 'invalid_tool_calls', 'invalidToolCalls']) {
+            if (Array.isArray(value[key]) && (value[key] as unknown[]).length > 0) return true;
+        }
+        return this.isToolContentBlock(value.fields) || this.isToolContentBlock(value.content);
     }
 
     private messageHasToolCalls(message: unknown): boolean {
