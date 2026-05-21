@@ -279,17 +279,21 @@ test('Agent runtime: written workflow files update the owning conversation conte
     assert.ok(!source.includes('runResult.workflowChanged && !promptWorkflowContext'), 'Existing context must not prevent switching to a newly written workflow');
 });
 
-test('CLI skills assets: dev resolution validates candidate assets before use', () => {
+test('CLI skills assets: extension bundles only runtime-required agent assets', () => {
     const fs = require('node:fs');
     const path = require('node:path');
     const rootPackage = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../../package.json'), 'utf8'));
     const extensionBuildSource = fs.readFileSync(path.join(__dirname, '../../esbuild.config.js'), 'utf8');
+    const ensureExtensionAssetsSource = fs.readFileSync(path.join(__dirname, '../../../../scripts/ensure-extension-skills-assets.cjs'), 'utf8');
     const cliSource = fs.readFileSync(path.join(__dirname, '../../../cli/src/index.ts'), 'utf8');
     const skillsCliSource = fs.readFileSync(path.join(__dirname, '../../../skills/src/cli.ts'), 'utf8');
 
-    assert.ok(rootPackage.scripts['build:extension'].includes('ensure-extension-skills-assets.cjs'), 'Extension build must verify skills assets before bundling');
-    assert.ok(extensionBuildSource.includes('hasRequiredSkillsAssets'), 'Extension bundler must reject incomplete skills asset directories');
-    assert.ok(!extensionBuildSource.includes('skills assets not found, skipping copy'), 'Extension bundler must not silently skip missing skills assets');
+    assert.ok(rootPackage.scripts['build:extension'].includes('ensure-extension-skills-assets.cjs'), 'Extension build must verify agent skills before bundling');
+    assert.ok(ensureExtensionAssetsSource.includes('hasRequiredAgentSkills'), 'Extension build preflight must verify agent skills before bundling');
+    assert.ok(extensionBuildSource.includes('legacyBundledSkillsAssetFiles'), 'Extension bundler must remove legacy generated JSON assets from VSIX assets');
+    assert.ok(extensionBuildSource.includes("fs.rmSync(path.join(targetDir, file), { force: true })"), 'Extension bundler must prune legacy generated JSON assets');
+    assert.ok(!extensionBuildSource.includes('hasRequiredSkillsAssets'), 'Extension bundler must not require generated skills JSON assets');
+    assert.ok(!extensionBuildSource.includes('skills assets not found; run `npm run build:extension`'), 'Extension bundler must not fail on missing generated skills JSON assets');
     assert.ok(cliSource.includes('hasRequiredAssets'), 'CLI must verify skills asset directories before selecting them');
     assert.ok(cliSource.includes("'vscode-extension', 'assets'"), 'CLI dev fallback should find extension-bundled assets');
     assert.ok(skillsCliSource.includes('hasRequiredAssets'), 'Direct skills CLI must verify skills asset directories before selecting them');
