@@ -176,16 +176,18 @@ jobs:
           fi
 
           cd packages/vscode-extension
-          VERSION=$(node -p "require('./package.json').version")
-          EXISTING=$(curl -s -X POST "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?api-version=7.2-preview.1" \
-            -H "Content-Type: application/json" \
-            -d '{"filters":[{"criteria":[{"filterType":7,"value":"etienne-lescot.n8n-as-code"}]}],"flags":529}' \
-            | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).results?.[0]?.extensions?.[0]?.versions?.map(v => v.version).join('\n') || ''")
           npx @vscode/vsce package --no-dependencies
-          if echo "$EXISTING" | grep -qxF "$VERSION"; then
-            echo "ℹ️ VS Code Marketplace already contains $VERSION, skipping publish."
+          if npx @vscode/vsce publish --no-dependencies --pat "$VSCE_TOKEN" > vsce-publish.log 2>&1; then
+            cat vsce-publish.log
           else
-            npx @vscode/vsce publish --no-dependencies --pat "$VSCE_TOKEN"
+            status=$?
+            cat vsce-publish.log
+            if grep -qi 'already exists' vsce-publish.log; then
+              VERSION=$(node -p "require('./package.json').version")
+              echo "ℹ️ VS Code Marketplace already contains $VERSION, skipping publish."
+            else
+              exit "$status"
+            fi
           fi
 
       - name: Publish Open VSX stable release
@@ -199,7 +201,18 @@ jobs:
           fi
           cd packages/vscode-extension
           if compgen -G "*.vsix" > /dev/null; then
-            npx ovsx publish *.vsix -p "$OVSX_TOKEN"
+            if npx ovsx publish *.vsix -p "$OVSX_TOKEN" > ovsx-publish.log 2>&1; then
+              cat ovsx-publish.log
+            else
+              status=$?
+              cat ovsx-publish.log
+              if grep -Eqi 'already (exists|published)|version .* already' ovsx-publish.log; then
+                VERSION=$(node -p "require('./package.json').version")
+                echo "ℹ️ Open VSX already contains $VERSION, skipping publish."
+              else
+                exit "$status"
+              fi
+            fi
           else
             echo "⚠️ No VSIX artifact found, skipping Open VSX publish."
           fi
@@ -663,16 +676,18 @@ jobs:
           fi
 
           cd packages/vscode-extension
-          VERSION=$(node -p "require('./package.json').version")
-          EXISTING=$(curl -s -X POST "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery?api-version=7.2-preview.1" \
-            -H "Content-Type: application/json" \
-            -d '{"filters":[{"criteria":[{"filterType":7,"value":"etienne-lescot.n8n-as-code"}]}],"flags":529}' \
-            | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).results?.[0]?.extensions?.[0]?.versions?.map(v => v.version).join('\n') || ''")
-          if echo "$EXISTING" | grep -qxF "$VERSION"; then
-            echo "ℹ️ VS Code Marketplace already contains $VERSION, skipping publish."
+          npx @vscode/vsce package --no-dependencies
+          if npx @vscode/vsce publish --no-dependencies --pre-release --pat "$VSCE_TOKEN" > vsce-publish.log 2>&1; then
+            cat vsce-publish.log
           else
-            npx @vscode/vsce package --no-dependencies
-            npx @vscode/vsce publish --no-dependencies --pre-release --pat "$VSCE_TOKEN"
+            status=$?
+            cat vsce-publish.log
+            if grep -qi 'already exists' vsce-publish.log; then
+              VERSION=$(node -p "require('./package.json').version")
+              echo "ℹ️ VS Code Marketplace already contains $VERSION, skipping publish."
+            else
+              exit "$status"
+            fi
           fi
 
       - name: Skip Open VSX prereleases
