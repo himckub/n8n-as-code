@@ -132,7 +132,6 @@ function copyRuntimeDependency(packageName, targetNodeModulesDir) {
     fs.cpSync(realSourceDir, targetDir, {
         recursive: true,
         dereference: true,
-        filter: source => !path.relative(realSourceDir, source).split(path.sep).includes('node_modules'),
     });
 }
 

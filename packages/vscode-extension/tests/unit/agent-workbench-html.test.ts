@@ -294,6 +294,7 @@ test('CLI skills assets: extension bundles only runtime-required agent assets', 
     assert.ok(extensionBuildSource.includes('legacyBundledSkillsAssetFiles'), 'Extension bundler must remove legacy generated JSON assets from VSIX assets');
     assert.ok(extensionBuildSource.includes("fs.rmSync(path.join(targetDir, file), { force: true })"), 'Extension bundler must prune legacy generated JSON assets');
     assert.ok(extensionBuildSource.includes('agent skills not found — AiContextGenerator will be unable to '), 'Extension bundler must fail when canonical agent skills are missing');
+    assert.ok(!extensionBuildSource.includes(".split(path.sep).includes('node_modules')"), 'Extension bundler must preserve nested dependency installs such as deepagents/node_modules/zod@4');
     assert.ok(!extensionBuildSource.includes('⚠️  agent skills not found'), 'Extension bundler must not silently continue without canonical agent skills');
     assert.ok(!extensionBuildSource.includes('hasRequiredSkillsAssets'), 'Extension bundler must not require generated skills JSON assets');
     assert.ok(!extensionBuildSource.includes('skills assets not found; run `npm run build:extension`'), 'Extension bundler must not fail on missing generated skills JSON assets');
