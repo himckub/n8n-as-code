@@ -2243,7 +2243,7 @@ export class AgentRuntimeController implements vscode.Disposable {
         if (classes.AIMessage?.isInstance?.(message)) {
             const rawToolCalls = this.extractRawProviderToolCalls(message);
             const toolCalls = rawToolCalls.length ? [] : this.extractProviderToolCalls(message);
-            if (!toolCalls.length && !this.messageHasStandardOnlyContent(message)) return message;
+            if (!toolCalls.length && !this.messageHasUnsupportedComplexContent(message)) return message;
             return new classes.AIMessage({
                 id: message.id,
                 name: message.name,
@@ -2266,7 +2266,7 @@ export class AgentRuntimeController implements vscode.Disposable {
             });
         }
         if (classes.SystemMessage?.isInstance?.(message) || classes.HumanMessage?.isInstance?.(message)) {
-            if (!this.messageHasStandardOnlyContent(message)) return message;
+            if (!this.messageHasUnsupportedComplexContent(message)) return message;
             const MessageClass = classes.SystemMessage?.isInstance?.(message) ? classes.SystemMessage : classes.HumanMessage;
             return new MessageClass({
                 id: message.id,
@@ -2276,12 +2276,28 @@ export class AgentRuntimeController implements vscode.Disposable {
                 response_metadata: this.omitProviderOutputVersion(message.response_metadata),
             });
         }
+        if (this.messageHasUnsupportedComplexContent(message)) {
+            return this.cloneMessageWithTextContent(message);
+        }
         return message;
     }
 
-    private messageHasStandardOnlyContent(message: any): boolean {
-        const content = Array.isArray(message?.content) ? message.content : [];
-        return content.some((block: any) => block && typeof block === 'object' && typeof block.type === 'string' && block.type !== 'text' && block.type !== 'image_url');
+    private messageHasUnsupportedComplexContent(message: any): boolean {
+        return this.getProviderContentBlocks(message).some((block: any) => {
+            if (!block || typeof block !== 'object') return false;
+            if (typeof block.type !== 'string') return false;
+            return block.type !== 'text' && block.type !== 'image_url';
+        });
+    }
+
+    private cloneMessageWithTextContent(message: any): any {
+        if (!message || typeof message !== 'object') return message;
+        const cloned = Object.create(Object.getPrototypeOf(message));
+        Object.assign(cloned, message, {
+            content: this.extractProviderTextContent(message),
+            response_metadata: this.omitProviderOutputVersion(message.response_metadata),
+        });
+        return cloned;
     }
 
     private extractProviderToolCalls(message: any): Array<{ id?: string; name: string; args: unknown; type?: 'tool_call' }> {

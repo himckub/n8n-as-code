@@ -247,7 +247,7 @@ function normalizeProviderMessage(message: any): any {
     });
   }
   if (SystemMessage.isInstance(message) || HumanMessage.isInstance(message)) {
-    if (!hasStandardOnlyContent(message)) return message;
+    if (!hasUnsupportedComplexContent(message)) return message;
     const MessageClass = SystemMessage.isInstance(message) ? SystemMessage : HumanMessage;
     return new MessageClass({
       id: message.id,
@@ -295,9 +295,8 @@ function getContentBlocks(message: any): any[] {
   return [];
 }
 
-function hasStandardOnlyContent(message: any): boolean {
-  const content = Array.isArray(message?.content) ? message.content : [];
-  return content.some((block: any) => block && typeof block === 'object' && typeof block.type === 'string' && block.type !== 'text' && block.type !== 'image_url');
+function hasUnsupportedComplexContent(message: any): boolean {
+  return getContentBlocks(message).some((block: any) => block && typeof block === 'object' && typeof block.type === 'string' && block.type !== 'text' && block.type !== 'image_url');
 }
 
 function omitToolCalls(value: any): any {

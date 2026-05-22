@@ -223,6 +223,16 @@ test('Agent runtime: provider raw tool calls are preserved for Gemini 3 tool loo
     assert.ok(source.includes('tool_calls: rawToolCalls'), 'Raw provider tool calls must be sent back through additional_kwargs.tool_calls');
 });
 
+test('Agent runtime: provider middleware flattens unsupported complex content blocks', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const source = fs.readFileSync(path.join(__dirname, '../../src/services/agent-runtime-controller.ts'), 'utf8');
+
+    assert.ok(source.includes('messageHasUnsupportedComplexContent'), 'Runtime must detect content blocks rejected by provider adapters');
+    assert.ok(source.includes('cloneMessageWithTextContent'), 'Runtime must flatten unsupported generic message content before provider calls');
+    assert.ok(source.includes("block.type !== 'text' && block.type !== 'image_url'"), 'Only text and image_url complex blocks can pass through to strict adapters such as Mistral');
+});
+
 test('Agent runtime: Codex v3 output adapter reads provider output items', () => {
     const fs = require('node:fs');
     const path = require('node:path');
